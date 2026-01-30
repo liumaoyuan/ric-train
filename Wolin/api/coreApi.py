@@ -9,8 +9,9 @@ from fastapi import APIRouter, UploadFile, File, Form, Response
 
 from Base.RicUtils.fileUtils import save_upload_file_to_temp
 from Base.RicUtils.httpUtils import HttpResponse
+from Wolin.ai.interview.iaState import IAState, ApiParams
+from Wolin.ai.interview.nodes.iaNodes import get_workflow
 from Wolin.core.interviewAnalysis import InterviewAnalysis
-from Wolin.service.interviewService import InterviewAnalysisService
 
 router = APIRouter()
 
@@ -32,20 +33,20 @@ async def interview_analysis(
     try:
         def run_analysis():
             try:
-                analysis_instance = InterviewAnalysis(audio_file=audio_file_path,
-                                                      resume_file=resume_file_path,
-                                                      receive_email=receive_email,
-                                                      user_name=user_name,
-                                                      company_name=company_name)
-                service = InterviewAnalysisService(analysis_instance)
-                service.save_origin_file_2_minio()
-                analysis_instance.analysis()
+                _state = IAState()
+                api_params = ApiParams(receive_email=receive_email,user_name=user_name,company_name=company_name)
+                _state.api_params = api_params
+                _state.asr_info.audio_path = audio_file_path
+                _state.resume_info.resume_path = resume_file_path
+                wf = get_workflow()
+                wf.invoke(_state)
             except Exception as e:
                 logger.error(f"[后台线程] InterviewAnalysis 发生异常: {e}", stack_info=True)
 
         # 3. 后台启动一个线程运行它（不阻塞当前请求）
-        thread = threading.Thread(target=run_analysis)
-        thread.start()
+        # thread = threading.Thread(target=run_analysis)
+        # thread.start()
+        run_analysis()
         return HttpResponse.ok(msg="正在分析中...")
     finally:
         if audio_file_path and os.path.exists(audio_file_path):

@@ -22,6 +22,7 @@ from WorkFlow.base.decorators import graph_node
 
 logger = logging.getLogger(__name__)
 
+
 @graph_node
 def extract_resume(state: IAState):
     """
@@ -34,7 +35,7 @@ def extract_resume(state: IAState):
     resume_content = extract_pdf_text(state.resume_info.resume_path)
     resume_infos = default_qwen_llm.chat([SystemMessages(RESUME_JSON_EXTRACT_PROMPT), UserMessages(resume_content)])
     resume_info_json = json.loads(resume_infos)
-    state.resume_info = ResumeInfo(**resume_info_json,resume_path=state.resume_info.resume_path)
+    state.resume_info = ResumeInfo(**resume_info_json, resume_path=state.resume_info.resume_path)
     return {'resume_info': state.resume_info}
 
 
@@ -51,16 +52,6 @@ def resume_analysis(state: IAState):
         [SystemMessages(RESUME_ANALYSIS_PROMPT), UserMessages(str(state.resume_info.model_dump()))])
     return {'report': {"resume_analysis": res}}
 
-
-@graph_node
-def resume_handle(state: IAState):
-    """
-    简历处理
-    :param state:
-    :return:
-    """
-    extract_resume(state)
-    resume_analysis(state)
 
 @graph_node
 def audio_handle(state: IAState):
@@ -130,7 +121,8 @@ def qa_pairs_analysis(state: IAState):
     :param state:
     :return:
     """
-    res = default_qwen_llm.chat([SystemMessages(CORE_QA_ANALYSIS_PROMPT), UserMessages(str(state.asr_info.qa_pairs))],timeout=240.0)
+    res = default_qwen_llm.chat([SystemMessages(CORE_QA_ANALYSIS_PROMPT), UserMessages(str(state.asr_info.qa_pairs))],
+                                timeout=240.0)
     return {"report": {"qa_analysis": json.loads(res)}}
 
 
@@ -190,8 +182,6 @@ def generate_report(state: IAState):
                                          file_path=output_path)
     except Exception as e:
         logger.error(f"报告MinIO存储失败：{e}")
-        return None
-
 
     try:
         uuid_str = str(uuid.uuid4())
@@ -199,12 +189,33 @@ def generate_report(state: IAState):
             user_name=state.api_params.user_name,
             ia_id=uuid_str,
             report_path=output_path,
-            user_email=['2366692214@qq.com',state.api_params.receive_email]
+            user_email=['2366692214@qq.com', state.api_params.receive_email]
         )
     except Exception as e:
         logger.error(f"报告邮件发送失败：{e}")
-        return None
 
+    if output_path and os.path.exists(output_path):
+        os.unlink(output_path)
+    return None
+
+
+def get_ia_node_list():
+    """
+    工作流 节点列表
+    :return:
+    """
+    return [['extract_resume', 'audio_handle'],
+            ['get_report_paragraph1', 'get_qa_pair', 'resume_analysis'],
+            ['analysis_end', 'self_evaluation', 'ai_evaluation', 'qa_pairs_analysis',
+             'get_report_table_data_json'], 'generate_report']
+
+
+def get_workflow():
+    """
+    工作流
+    :return:
+    """
+    return BaseWorkFlow(node_list=get_ia_node_list(), state_schema=IAState)
 
 
 if __name__ == '__main__':
@@ -241,7 +252,7 @@ if __name__ == '__main__':
         node_list = [['extract_resume', 'audio_handle'],
                      ['get_report_paragraph1', 'get_qa_pair', 'resume_analysis'],
                      ['analysis_end', 'self_evaluation', 'ai_evaluation', 'qa_pairs_analysis',
-                      'get_report_table_data_json'],'generate_report']
+                      'get_report_table_data_json'], 'generate_report']
         wf = BaseWorkFlow(node_list=node_list, state_schema=IAState)
         wf.invoke(input_data=_state)
         print(1)
