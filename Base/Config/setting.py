@@ -8,143 +8,30 @@ from Base.RicUtils.pathUtils import find_project_root
 
 
 # =========================
-# MySQL
+# Base Settings with .env
 # =========================
-class MySQLSettings(BaseSettings):
-    host: str
-    port: int = 3306
-    user: str
-    password: str
-    name: str
-    charset: str = "utf8mb4"
-
-    model_config = SettingsConfigDict(
-        env_prefix="DB_",
-        extra="ignore",
-    )
-
-
-# =========================
-# Email
-# =========================
-class EmailSettings(BaseSettings):
-    sender_email: Optional[str] = Field(None, alias="SENDER_EMAIL")
-    password: str = Field(..., alias="EMAIL_PASSWORD")
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-# =========================
-# LLM Basic
-# =========================
-class LLMSettings(BaseSettings):
-    timeout: float = 30.0
-
-    model_config = SettingsConfigDict(
-        env_prefix="LLM_",
-        extra="ignore",
-    )
-
-# =========================
-# DashScope
-# =========================
-class DashScopeSettings(BaseSettings):
-    api_url: str = Field(..., alias="DSC_API_URL")
-    api_key: str = Field(..., alias="DASHSCOPE_API_KEY")
-    base_url: str = Field(..., alias="QWEN_BASE_URL")
-    default_model: str = Field(..., alias="QWEN_DEFAULT_MODEL")
-    model_config = SettingsConfigDict(extra="ignore")
-
-
-# =========================
-# DeepSeek
-# =========================
-class DeepSeekSettings(BaseSettings):
-    api_key: str = Field(..., alias="DEEPSEEK_API_KEY")
-    base_url: str = Field(..., alias="DEEPSEEK_BASE_URL")
-    default_model: str = Field(..., alias="DEEPSEEK_DEFAULT_MODEL")
-    model_config = SettingsConfigDict(extra="ignore")
-
-
-# =========================
-# Redis
-# =========================
-class RedisSettings(BaseSettings):
-    host: str = "localhost"
-    port: int = 6379
-    db: int = 0
-    password: Optional[str] = None
-
-    model_config = SettingsConfigDict(
-        env_prefix="REDIS_",
-        extra="ignore",
-    )
-
-
-# =========================
-# FFmpeg
-# =========================
-class FFmpegSettings(BaseSettings):
-    path: str
-
-    model_config = SettingsConfigDict(
-        env_prefix="FFMPEG_",
-        extra="ignore",
-    )
-
-
-# =========================
-# MinIO
-# =========================
-class MinIOSettings(BaseSettings):
-    access_key: str
-    secret_key: str
-    endpoint: str
-    asr_text_bucket_name: Optional[str] = Field(
-        None, alias="MINIO_ASR_TEXT_BUCKET_NAME"
-    )
-
-    model_config = SettingsConfigDict(
-        env_prefix="MINIO_",
-        extra="ignore",
-    )
-
-
-# =========================
-# Tencent COS
-# =========================
-class TencentCOSSettings(BaseSettings):
-    secret_id: str
-    secret_key: str
-    region: str
-
-    token: Optional[str] = None
-    scheme: str = "https"
-    bucket_name: str
-
-    proxy_http_ip: Optional[str] = None
-    proxy_https_ip: Optional[str] = None
-
-    model_config = SettingsConfigDict(
-        env_prefix="TC_",
-        extra="ignore",
-    )
-
-
-# =========================
-# Default Settings
-# =========================
-class DefaultSettings(BaseSettings):
+class BaseEnvSettings(BaseSettings):
     """
-    默认设置类，自动加载 .env 文件中的所有额外变量
+    自动查找 .env 文件的基类
 
-    使用 extra="allow" 接受任意环境变量。
-    提供便捷的字典式访问和动态字段查询。
+    所有继承此类的 settings 类都会自动从项目根目录查找 .env 文件。
+    支持自定义 env_prefix 以区分不同模块的环境变量。
+
+    使用示例：
+        class MySettings(BaseEnvSettings):
+            host: str = "localhost"
+            port: int = 3306
+
+            model_config = SettingsConfigDict(
+                env_prefix="MY_APP_",
+                extra="ignore",
+            )
     """
 
     model_config = SettingsConfigDict(
         env_file=find_project_root() / ".env",
         env_file_encoding="utf-8",
-        case_sensitive=False,
+        case_sensitive=False, # 忽略大小写敏感
         extra="allow",  # 允许额外的字段
     )
 
@@ -179,15 +66,15 @@ class DefaultSettings(BaseSettings):
         return self.model_dump()
 
     @classmethod
-    def load_env_vars(cls, env_file: Optional[Path] = None) -> "DefaultSettings":
+    def load_env_vars(cls, env_file: Optional[Path] = None) -> "BaseEnvSettings":
         """
         从指定的 .env 文件加载环境变量
-
+        重新指定或者切换 .env 文件路径
         Args:
             env_file: .env 文件路径，如果为 None 则使用默认路径
 
         Returns:
-            DefaultSettings 实例
+            BaseEnvSettings 实例
         """
         if env_file is None:
             env_file = find_project_root() / ".env"
@@ -224,13 +111,150 @@ class DefaultSettings(BaseSettings):
 
 
 # =========================
+# MySQL
+# =========================
+class MySQLSettings(BaseEnvSettings):
+    host: str
+    port: int = 3306
+    user: str
+    password: str
+    name: str
+    charset: str = "utf8mb4"
+
+    model_config = SettingsConfigDict(
+        env_prefix="DB_",
+        extra="ignore",
+    )
+
+
+# =========================
+# Email
+# =========================
+class EmailSettings(BaseEnvSettings):
+    sender_email: Optional[str] = Field(None, alias="SENDER_EMAIL")
+    password: str = Field(..., alias="EMAIL_PASSWORD")
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+# =========================
+# LLM Basic
+# =========================
+class LLMSettings(BaseEnvSettings):
+    timeout: float = 30.0
+
+    model_config = SettingsConfigDict(
+        env_prefix="LLM_",
+        extra="ignore",
+    )
+
+# =========================
+# DashScope
+# =========================
+class DashScopeSettings(BaseEnvSettings):
+    api_url: str = Field(..., alias="DSC_API_URL")
+    api_key: str = Field(..., alias="DASHSCOPE_API_KEY")
+    base_url: str = Field(..., alias="QWEN_BASE_URL")
+    default_model: str = Field(..., alias="QWEN_DEFAULT_MODEL")
+    model_config = SettingsConfigDict(extra="ignore")
+
+
+# =========================
+# DeepSeek
+# =========================
+class DeepSeekSettings(BaseEnvSettings):
+    api_key: str = Field(..., alias="DEEPSEEK_API_KEY")
+    base_url: str = Field(..., alias="DEEPSEEK_BASE_URL")
+    default_model: str = Field(..., alias="DEEPSEEK_DEFAULT_MODEL")
+    model_config = SettingsConfigDict(extra="ignore")
+
+
+# =========================
+# Redis
+# =========================
+class RedisSettings(BaseEnvSettings):
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    password: Optional[str] = None
+
+    model_config = SettingsConfigDict(
+        env_prefix="REDIS_",
+        extra="ignore",
+    )
+
+
+# =========================
+# FFmpeg
+# =========================
+class FFmpegSettings(BaseEnvSettings):
+    path: str
+
+    model_config = SettingsConfigDict(
+        env_prefix="FFMPEG_",
+        extra="ignore",
+    )
+
+
+# =========================
+# MinIO
+# =========================
+class MinIOSettings(BaseEnvSettings):
+    access_key: str
+    secret_key: str
+    endpoint: str
+    asr_text_bucket_name: Optional[str] = Field(
+        None, alias="MINIO_ASR_TEXT_BUCKET_NAME"
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="MINIO_",
+        extra="ignore",
+    )
+
+
+# =========================
+# Tencent COS
+# =========================
+class TencentCOSSettings(BaseEnvSettings):
+    secret_id: str
+    secret_key: str
+    region: str
+
+    token: Optional[str] = None
+    scheme: str = "https"
+    bucket_name: str
+
+    proxy_http_ip: Optional[str] = None
+    proxy_https_ip: Optional[str] = None
+
+    model_config = SettingsConfigDict(
+        env_prefix="TC_",
+        extra="ignore",
+    )
+
+# =========================
+# Base module
+# =========================
+class BaseModuleSettings(BaseEnvSettings):
+    db_name: str
+
+
+    model_config = SettingsConfigDict(
+        env_prefix="BASE_",
+        extra="ignore",
+    )
+
+# =========================
 # App Settings
 # =========================
-class Settings(BaseSettings):
-    """应用程序主设置类"""
+class Settings(BaseEnvSettings):
+    """
+    应用程序主设置类
+    聚合所有模块的 settings 类。
+    """
 
     log_level: str = "INFO"
-    default: DefaultSettings = Field(default_factory=DefaultSettings)
+    default: BaseEnvSettings = Field(default_factory=BaseEnvSettings)
 
     mysql: MySQLSettings = Field(default_factory=MySQLSettings)
     email: EmailSettings = Field(default_factory=EmailSettings)
@@ -241,7 +265,9 @@ class Settings(BaseSettings):
     ffmpeg: FFmpegSettings = Field(default_factory=FFmpegSettings)
     minio: MinIOSettings = Field(default_factory=MinIOSettings)
     tencent_cos: TencentCOSSettings = Field(default_factory=TencentCOSSettings)
+    base_module: BaseModuleSettings = Field(default_factory=BaseModuleSettings)
 
+    # 覆盖 extra="ignore" 以避免加载未知的环境变量
     model_config = SettingsConfigDict(
         env_file=find_project_root() / ".env",
         env_file_encoding="utf-8",
