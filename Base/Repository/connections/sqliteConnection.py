@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import logging
 
 from Base.Repository.base.baseConnection import BaseConnection
@@ -77,45 +77,65 @@ class SQLiteConnection(BaseConnection):
     # 覆盖父类方法以适配 SQLite
     # ======================
 
-    def execute_query(self, sql: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
-        """执行查询语句，返回结果列表（SQLite 使用字典行）"""
+    def execute(
+        self,
+        sql: str,
+        params: Optional[tuple] = None,
+        operation_type: Optional[str] = None,
+        commit: bool = True
+    ) -> Union[List[Dict[str, Any]], int]:
+        """
+        执行SQL语句的统一接口（SQLite 实现，需要设置 row_factory）
+
+        Args:
+            sql: SQL语句
+            params: SQL参数
+            operation_type: 操作类型，不指定则自动从SQL中推断
+            commit: 是否自动提交事务（仅对非查询操作有效）
+
+        Returns:
+            - query: List[Dict[str, Any]] - 查询结果列表
+            - insert: int - 插入的ID
+            - update/delete/execute: int - 影响的行数
+        """
+        if operation_type is None:
+            operation_type = self._detect_operation_type(sql)
+
         conn = self.get_connection()
-        conn.row_factory = sqlite3.Row  # 设置行工厂
+        conn.row_factory = sqlite3.Row  # SQLite 需要设置行工厂以返回字典格式
         try:
             cur = conn.cursor()
             cur.execute(sql, params or ())
-            results = [dict(row) for row in cur.fetchall()]
-            return results
+
+            # 根据操作类型返回不同的结果
+            if operation_type == "query":
+                results = [dict(row) for row in cur.fetchall()]
+                return results
+            elif operation_type == "insert":
+                last_id = cur.lastrowid
+                if commit:
+                    conn.commit()
+                return last_id
+            else:  # UPDATE, DELETE, EXECUTE
+                affected = cur.rowcount
+                if commit:
+                    conn.commit()
+                return affected
         finally:
             conn.close()
+
+    # 向后兼容的封装函数
+    def execute_query(self, sql: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
+        """执行查询语句，返回结果列表（向后兼容接口）"""
+        return self.execute(sql, params, "query")
 
     def execute_update(self, sql: str, params: Optional[tuple] = None, commit: bool = True) -> int:
-        """执行更新语句，返回影响的行数（SQLite 自动提交）"""
-        conn = self.get_connection()
-        conn.row_factory = sqlite3.Row
-        try:
-            cur = conn.cursor()
-            cur.execute(sql, params or ())
-            affected = cur.rowcount
-            if commit:
-                conn.commit()
-            return affected
-        finally:
-            conn.close()
+        """执行更新语句，返回影响的行数（向后兼容接口）"""
+        return self.execute(sql, params, "update", commit)
 
     def execute_insert(self, sql: str, params: Optional[tuple] = None, commit: bool = True) -> int:
-        """执行插入语句，返回插入的ID（SQLite 语法）"""
-        conn = self.get_connection()
-        conn.row_factory = sqlite3.Row
-        try:
-            cur = conn.cursor()
-            cur.execute(sql, params or ())
-            last_id = cur.lastrowid
-            if commit:
-                conn.commit()
-            return last_id
-        finally:
-            conn.close()
+        """执行插入语句，返回插入的ID（向后兼容接口）"""
+        return self.execute(sql, params, "insert", commit)
 
     # ======================
     # SQLite 便捷方法

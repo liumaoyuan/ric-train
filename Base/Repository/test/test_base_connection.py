@@ -155,6 +155,76 @@ def test_base_connection_execute_update_signature():
     assert 'commit' in params
 
 
+def test_base_connection_execute_method_exists():
+    """测试新的统一 execute 方法存在"""
+    assert hasattr(BaseConnection, 'execute')
+
+
+def test_base_connection_execute_signature():
+    """测试 execute 方法签名"""
+    import inspect
+    sig = inspect.signature(BaseConnection.execute)
+    params = list(sig.parameters.keys())
+
+    assert 'sql' in params
+    assert 'params' in params
+    assert 'operation_type' in params
+    assert 'commit' in params
+
+
+def test_base_connection_operation_type_constants():
+    """测试 OperationType 常量"""
+    from Base.Repository.base.baseConnection import OperationType
+
+    assert hasattr(OperationType, 'QUERY')
+    assert hasattr(OperationType, 'INSERT')
+    assert hasattr(OperationType, 'UPDATE')
+    assert hasattr(OperationType, 'DELETE')
+    assert hasattr(OperationType, 'EXECUTE')
+
+    assert OperationType.QUERY == "query"
+    assert OperationType.INSERT == "insert"
+    assert OperationType.UPDATE == "update"
+    assert OperationType.DELETE == "delete"
+    assert OperationType.EXECUTE == "execute"
+
+
+def test_base_connection_detect_operation_type():
+    """测试 _detect_operation_type 方法"""
+    # 创建一个测试连接实例
+    class TestConnection(BaseConnection):
+        def _ensure_database_exists(self):
+            pass
+
+        def _create_connection_pool(self):
+            pass
+
+        def _get_raw_connection(self):
+            pass
+
+    conn = TestConnection(
+        host="localhost",
+        user="root",
+        password="root",
+        database="test",
+        port=3306,
+        charset="utf8",
+        mincached=2,
+        maxcached=10,
+        maxconnections=20,
+        blocking=False
+    )
+
+    assert conn._detect_operation_type("SELECT * FROM users") == "query"
+    assert conn._detect_operation_type("INSERT INTO users VALUES (1, 'test')") == "insert"
+    assert conn._detect_operation_type("UPDATE users SET name = 'test'") == "update"
+    assert conn._detect_operation_type("DELETE FROM users WHERE id = 1") == "delete"
+    assert conn._detect_operation_type("CREATE TABLE test (id INT)") == "execute"
+    assert conn._detect_operation_type("  SELECT * FROM users  ") == "query"  # 测试空格
+    assert conn._detect_operation_type("show tables") == "query"  # 测试小写
+    assert conn._detect_operation_type("DESCRIBE users") == "query"  # 测试 DESCRIBE
+
+
 def test_base_connection_execute_insert_signature():
     """测试 execute_insert 方法签名"""
     import inspect
@@ -164,3 +234,73 @@ def test_base_connection_execute_insert_signature():
     assert 'sql' in params
     assert 'params' in params
     assert 'commit' in params
+
+
+def test_base_connection_execute_method_exists():
+    """测试新的统一 execute 方法存在"""
+    assert hasattr(BaseConnection, 'execute')
+
+
+def test_base_connection_execute_signature():
+    """测试 execute 方法签名"""
+    import inspect
+    sig = inspect.signature(BaseConnection.execute)
+    params = list(sig.parameters.keys())
+
+    assert 'sql' in params
+    assert 'params' in params
+    assert 'operation_type' in params
+    assert 'commit' in params
+
+
+def test_base_connection_operation_type_constants():
+    """测试 OperationType 常量"""
+    from Base.Repository.base.baseConnection import OperationType
+
+    assert hasattr(OperationType, 'QUERY')
+    assert hasattr(OperationType, 'INSERT')
+    assert hasattr(OperationType, 'UPDATE')
+    assert hasattr(OperationType, 'DELETE')
+    assert hasattr(OperationType, 'EXECUTE')
+
+    assert OperationType.QUERY == "query"
+    assert OperationType.INSERT == "insert"
+    assert OperationType.UPDATE == "update"
+    assert OperationType.DELETE == "delete"
+    assert OperationType.EXECUTE == "execute"
+
+
+def test_base_connection_detect_operation_type():
+    """测试 _detect_operation_type 方法"""
+    # 创建一个测试连接实例
+    class TestConnection(BaseConnection):
+        def _ensure_database_exists(self):
+            pass
+
+        def _create_connection_pool(self):
+            pass
+
+        def _get_raw_connection(self):
+            pass
+
+    conn = TestConnection(
+        host="localhost",
+        user="root",
+        password="root",
+        database="test",
+        port=3306,
+        charset="utf8",
+        mincached=2,
+        maxcached=10,
+        maxconnections=20,
+        blocking=False
+    )
+
+    assert conn._detect_operation_type("SELECT * FROM users") == "query"
+    assert conn._detect_operation_type("INSERT INTO users VALUES (1, 'test')") == "insert"
+    assert conn._detect_operation_type("UPDATE users SET name = 'test'") == "update"
+    assert conn._detect_operation_type("DELETE FROM users WHERE id = 1") == "delete"
+    assert conn._detect_operation_type("CREATE TABLE test (id INT)") == "execute"
+    assert conn._detect_operation_type("  SELECT * FROM users  ") == "query"  # 测试空格
+    assert conn._detect_operation_type("show tables") == "query"  # 测试小写
+    assert conn._detect_operation_type("DESCRIBE users") == "query"  # 测试 DESCRIBE

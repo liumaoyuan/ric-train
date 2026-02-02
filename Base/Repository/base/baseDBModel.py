@@ -57,12 +57,16 @@ class BaseDBModel(BaseModel, ABC):
     
     # 类变量：表名别名（可选）
     table_alias: ClassVar[Optional[str]] = None
+    # 类变量：手动声明的建表 SQL（可选，如果声明则优先使用）
+    create_table_sql: ClassVar[Optional[str]] = None
     # 类变量：默认数据库连接（全局默认）
     _default_db_connection: ClassVar[Optional[BaseConnection]] = None
     # 类变量：每个类可以有自己的连接
     _db_connection: ClassVar[Optional[BaseConnection]] = None
     # 实例变量：实例级别的连接（优先级最高）
     _instance_db_connection: Optional[BaseConnection] = None
+    # 类变量：表检查缓存（避免重复检查）
+    _table_checked: ClassVar[bool] = False
     
     # 抽象属性：主键字段（子类可以覆盖此属性以自定义类型或描述）
     # 注意：id 字段在基类中已定义，子类可以覆盖此字段以自定义类型或验证规则
@@ -155,29 +159,98 @@ class BaseDBModel(BaseModel, ABC):
     
     @classmethod
     def table_exists(cls) -> bool:
-        """检查表是否存在"""
-        db = cls.get_db_connection()
-        sql = """
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = %s AND table_name = %s
         """
-        result = db.execute_query(sql, (db.config["database"], cls.get_table_name()))
+        检查表是否存在
+        支持 MySQL、PostgreSQL 和 SQLite
+        """
+        db = cls.get_db_connection()
+        table_name = cls.get_table_name()
+        
+        # 根据数据库类型使用不同的查询方式
+        db_type = db.config.get("type", "mysql").lower()
+        
+        if db_type == "sqlite":
+            # SQLite 使用 sqlite_master 表
+            sql = """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = %s
+            """
+            result = db.execute(sql, (table_name,))
+        elif db_type == "postgresql":
+            # PostgreSQL 使用 information_schema
+            sql = """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = %s
+            """
+            result = db.execute(sql, (table_name,))
+        else:
+            # MySQL 使用 information_schema
+            database = db.config.get("database")
+            if database is None:
+                raise ValueError("MySQL 配置中缺少 database 参数")
+            sql = """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = %s AND table_name = %s
+            """
+            result = db.execute(sql, (database, table_name))
+        
         return len(result) > 0
 
     @classmethod
-    def create_table(cls, table_sql: str) -> None:
-        """创建表"""
+    def get_create_table_sql(cls) -> str:
+        """
+        获取建表 SQL
+        优先级：手动声明的 SQL > 自动生成的 SQL
+        """
+        # 暂时只支持手动声明
+        if cls.create_table_sql is None:
+            raise NotImplementedError(
+                f"类 {cls.__name__} 未定义 create_table_sql。\n"
+                f"请在类中声明：create_table_sql = \"CREATE TABLE ...\"\n"
+                f"或等待未来版本支持自动根据字段生成建表 SQL。"
+            )
+        
+        # 替换表名占位符（如果有）
+        table_name = cls.get_table_name()
+        return cls.create_table_sql.replace("{{table_name}}", table_name)
+
+    @classmethod
+    def create_table(cls) -> None:
+        """创建表（使用手动声明的建表 SQL）"""
         db = cls.get_db_connection()
-        db.execute_update(table_sql, commit=True)
+        sql = cls.get_create_table_sql()
+        db.execute(sql, commit=True)
+        logger.info(f"表 {cls.get_table_name()} 创建成功")
+
+    @classmethod
+    def _ensure_table_exists(cls) -> None:
+        """
+        确保表存在，不存在则自动创建
+        使用缓存机制避免重复检查
+        """
+        # 如果已经检查过，直接返回
+        if cls._table_checked:
+            return
+        
+        # 检查表是否存在
+        if not cls.table_exists():
+            logger.info(f"表 {cls.get_table_name()} 不存在，开始创建...")
+            cls.create_table()
+        
+        # 标记为已检查
+        cls._table_checked = True
     
     @classmethod
     def get_by_id(cls: Type[T], id_val: int) -> Optional[T]:
         """根据ID查询记录"""
+        cls._ensure_table_exists()
         db = cls.get_db_connection()
         table_name = cls.get_table_name()
         sql = f"SELECT * FROM `{table_name}` WHERE id = %s"
-        result = db.execute_query(sql, (id_val,))
+        result = db.execute(sql, (id_val,))
         
         if not result:
             return None
@@ -187,6 +260,7 @@ class BaseDBModel(BaseModel, ABC):
     @classmethod
     def get_all(cls: Type[T], limit: Optional[int] = None, offset: int = 0) -> List[T]:
         """查询所有记录"""
+        cls._ensure_table_exists()
         db = cls.get_db_connection()
         table_name = cls.get_table_name()
         sql = f"SELECT * FROM `{table_name}`"
@@ -194,7 +268,7 @@ class BaseDBModel(BaseModel, ABC):
         if limit is not None:
             sql += f" LIMIT {offset}, {limit}"
         
-        results = db.execute_query(sql)
+        results = db.execute(sql)
         return [cls(**row) for row in results]
     
     @classmethod
@@ -203,6 +277,7 @@ class BaseDBModel(BaseModel, ABC):
         if not filters:
             return cls.get_all()
         
+        cls._ensure_table_exists()
         db = cls.get_db_connection()
         table_name = cls.get_table_name()
         
@@ -213,7 +288,7 @@ class BaseDBModel(BaseModel, ABC):
             params.append(value)
         
         sql = f"SELECT * FROM `{table_name}` WHERE {' AND '.join(where_clauses)}"
-        results = db.execute_query(sql, tuple(params))
+        results = db.execute(sql, tuple(params))
         return [cls(**row) for row in results]
     
     @classmethod
@@ -224,6 +299,7 @@ class BaseDBModel(BaseModel, ABC):
     
     def save(self) -> int:
         """保存记录（插入或更新），返回ID"""
+        self.__class__._ensure_table_exists()
         if self.id is None:
             return self._insert()
         else:
@@ -245,7 +321,7 @@ class BaseDBModel(BaseModel, ABC):
         placeholders = ",".join(["%s"] * len(keys))
         sql = f"INSERT INTO `{table_name}` ({','.join(keys)}) VALUES ({placeholders})"
         
-        self.id = db.execute_insert(sql, tuple(data[k] for k in keys))
+        self.id = db.execute(sql, tuple(data[k] for k in keys))
         return self.id
     
     def _update(self) -> bool:
@@ -262,7 +338,7 @@ class BaseDBModel(BaseModel, ABC):
         sets = ",".join([f"{k}=%s" for k in data])
         sql = f"UPDATE `{table_name}` SET {sets} WHERE id = %s"
         
-        affected = db.execute_update(sql, tuple(data.values()) + (self.id,))
+        affected = db.execute(sql, tuple(data.values()) + (self.id,))
         return affected > 0
     
     def update(self, **fields) -> bool:
@@ -277,21 +353,23 @@ class BaseDBModel(BaseModel, ABC):
         if self.id is None:
             raise ValueError("无法删除未保存的记录")
         
+        self.__class__._ensure_table_exists()
         db = self.get_db_connection()
         table_name = self.get_table_name()
         sql = f"DELETE FROM `{table_name}` WHERE id = %s"
         
-        affected = db.execute_update(sql, (self.id,))
+        affected = db.execute(sql, (self.id,))
         return affected > 0
     
     @classmethod
     def delete_by_id(cls, id_val: int) -> bool:
         """根据ID删除记录"""
+        cls._ensure_table_exists()
         db = cls.get_db_connection()
         table_name = cls.get_table_name()
         sql = f"DELETE FROM `{table_name}` WHERE id = %s"
         
-        affected = db.execute_update(sql, (id_val,))
+        affected = db.execute(sql, (id_val,))
         return affected > 0
     
     def to_dict(self) -> Dict[str, Any]:
@@ -301,8 +379,9 @@ class BaseDBModel(BaseModel, ABC):
     @classmethod
     def count(cls) -> int:
         """查询记录总数"""
+        cls._ensure_table_exists()
         db = cls.get_db_connection()
         table_name = cls.get_table_name()
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
-        result = db.execute_query(sql)
+        result = db.execute(sql)
         return result[0]['count'] if result else 0

@@ -121,7 +121,7 @@ class MySQLConnection(BaseConnection):
         FROM information_schema.tables
         WHERE table_schema = %s AND table_name = %s
         """
-        result = self.execute_query(
+        result = self.execute(
             sql,
             (self.config["database"], table_name)
         )

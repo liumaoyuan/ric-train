@@ -1,9 +1,18 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from contextlib import contextmanager
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class OperationType:
+    """操作类型常量"""
+    QUERY = "query"  # 查询操作 (SELECT)
+    INSERT = "insert"  # 插入操作 (INSERT)
+    UPDATE = "update"  # 更新操作 (UPDATE)
+    DELETE = "delete"  # 删除操作 (DELETE)
+    EXECUTE = "execute"  # 通用执行 (其他)
 
 
 class BaseConnection(ABC):
@@ -15,18 +24,18 @@ class BaseConnection(ABC):
     """
 
     def __init__(
-        self,
-        host: str,
-        user: str,
-        password: str,
-        database: str,
-        port: int,
-        charset: str,
-        # 连接池通用参数
-        mincached: int,
-        maxcached: int,
-        maxconnections: int,
-        blocking: bool,
+            self,
+            host: str,
+            user: str,
+            password: str,
+            database: str,
+            port: int,
+            charset: str,
+            # 连接池通用参数
+            mincached: int,
+            maxcached: int,
+            maxconnections: int,
+            blocking: bool,
     ):
         self.config = {
             "host": host,
@@ -83,41 +92,146 @@ class BaseConnection(ABC):
         finally:
             conn.close()  # 关闭连接会自动归还到连接池
 
-    def execute_query(self, sql: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
-        """执行查询语句，返回结果列表"""
+    def execute(
+            self,
+            sql: str,
+            params: Optional[tuple] = None,
+            operation_type: Optional[str] = None,
+            commit: bool = True
+    ) -> Union[List[Dict[str, Any]], int]:
+        """
+        执行SQL语句的统一接口
+
+        Args:
+            sql: SQL语句
+            params: SQL参数
+            operation_type: 操作类型，不指定则自动从SQL中推断
+                - "query": 查询操作，返回结果列表
+                - "insert": 插入操作，返回插入的ID
+                - "update": 更新操作，返回影响行数
+                - "delete": 删除操作，返回影响行数
+                - "execute": 其他操作，返回影响行数
+            commit: 是否自动提交事务（仅对非查询操作有效）
+
+        Returns:
+            - query: List[Dict[str, Any]] - 查询结果列表
+            - insert: int - 插入的ID
+            - update/delete/execute: int - 影响的行数
+
+        Examples:
+            >>> conn.execute("SELECT * FROM users WHERE id = %s", (1,))
+            >>> conn.execute("INSERT INTO users (name) VALUES (%s)", ("Alice",), "insert")
+            >>> conn.execute("UPDATE users SET name = %s WHERE id = %s", ("Bob", 1))
+        """
+        if operation_type is None:
+            operation_type = self._detect_operation_type(sql)
+
+        # 记录 SQL 执行日志
+        self._log_sql_execution(sql, params, operation_type)
+
         conn = self.get_connection()
         try:
             with conn.cursor() as cur:
                 cur.execute(sql, params or ())
-                return cur.fetchall()
+
+                # 根据操作类型返回不同的结果
+                if operation_type == OperationType.QUERY:
+                    result = cur.fetchall()
+                    logger.debug(f"查询返回 {len(result)} 行数据")
+                    return result
+                elif operation_type == OperationType.INSERT:
+                    last_id = cur.lastrowid
+                    if commit:
+                        conn.commit()
+                        logger.debug(f"提交事务，插入 ID: {last_id}")
+                    else:
+                        logger.debug(f"未提交事务，插入 ID: {last_id}")
+                    return last_id
+                else:  # UPDATE, DELETE, EXECUTE
+                    affected = cur.rowcount
+                    if commit:
+                        conn.commit()
+                        logger.debug(f"提交事务，影响行数: {affected}")
+                    else:
+                        logger.debug(f"未提交事务，影响行数: {affected}")
+                    return affected
+        except Exception as e:
+            logger.error(f"SQL 执行失败: {e}")
+            logger.error(f"失败 SQL: {sql}")
+            logger.error(f"参数: {params}")
+            raise
         finally:
             conn.close()
 
-    def execute_update(self, sql: str, params: Optional[tuple] = None, commit: bool = True) -> int:
-        """执行更新语句，返回影响的行数"""
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(sql, params or ())
-                affected = cur.rowcount
-                if commit:
-                    conn.commit()
-                return affected
-        finally:
-            conn.close()
+    def _log_sql_execution(self, sql: str, params: Optional[tuple], operation_type: str):
+        """
+        记录 SQL 执行日志
 
-    def execute_insert(self, sql: str, params: Optional[tuple] = None, commit: bool = True) -> int:
-        """执行插入语句，返回插入的ID"""
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(sql, params or ())
-                last_id = cur.lastrowid
-                if commit:
-                    conn.commit()
-                return last_id
-        finally:
-            conn.close()
+        Args:
+            sql: SQL语句
+            params: SQL参数
+            operation_type: 操作类型
+        """
+        # 格式化 SQL 和参数
+        if params:
+            # 将 SQL 中的占位符替换为实际参数值（仅用于日志显示）
+            try:
+                formatted_sql = self._format_sql_with_params(sql, params)
+                logger.debug(f"[{operation_type.upper()}] {formatted_sql}")
+            except Exception:
+                # 如果格式化失败，则分别记录 SQL 和参数
+                logger.debug(f"[{operation_type.upper()}] SQL: {sql} | Params: {params}")
+        else:
+            logger.debug(f"[{operation_type.upper()}] {sql}")
+
+    @staticmethod
+    def _format_sql_with_params(sql: str, params: tuple) -> str:
+        """
+        将参数值格式化到 SQL 语句中（仅用于日志显示）
+
+        Args:
+            sql: SQL语句
+            params: SQL参数
+
+        Returns:
+            格式化后的 SQL 语句
+        """
+        formatted_sql = sql
+        # 处理 %s 占位符（MySQL, PostgreSQL）
+        if "%s" in formatted_sql:
+            for param in params:
+                param_str = _format_param_value(param)
+                formatted_sql = formatted_sql.replace("%s", param_str, 1)
+        # 处理 ? 占位符（SQLite）
+        elif "?" in formatted_sql:
+            for param in params:
+                param_str = _format_param_value(param)
+                formatted_sql = formatted_sql.replace("?", param_str, 1)
+
+        return formatted_sql
+
+    @staticmethod
+    def _detect_operation_type(sql: str) -> str:
+        """
+        自动检测SQL语句的操作类型
+
+        Args:
+            sql: SQL语句
+
+        Returns:
+            操作类型字符串
+        """
+        sql_upper = sql.strip().upper()
+        if sql_upper.startswith("SELECT") or sql_upper.startswith("SHOW") or sql_upper.startswith("DESCRIBE"):
+            return OperationType.QUERY
+        elif sql_upper.startswith("INSERT"):
+            return OperationType.INSERT
+        elif sql_upper.startswith("UPDATE"):
+            return OperationType.UPDATE
+        elif sql_upper.startswith("DELETE"):
+            return OperationType.DELETE
+        else:
+            return OperationType.EXECUTE
 
     @contextmanager
     def get_connection_for_transaction(self):
@@ -136,3 +250,32 @@ class BaseConnection(ABC):
         if self._connection_pool is not None:
             logger.info("连接池已关闭")
         logger.debug("DatabaseConnection 已释放")
+
+
+def _format_param_value(param: Any) -> str:
+    """
+    格式化参数值，用于 SQL 日志显示
+
+    Args:
+        param: 参数值
+
+    Returns:
+        格式化后的字符串
+    """
+    if param is None:
+        return "NULL"
+    elif isinstance(param, str):
+        # 转义单引号，并使用单引号包裹字符串
+        escaped = param.replace("'", "''")
+        return f"'{escaped}'"
+    elif isinstance(param, (int, float)):
+        return str(param)
+    elif isinstance(param, bool):
+        return "1" if param else "0"
+    elif isinstance(param, (list, tuple)):
+        # 处理列表和元组
+        return ", ".join(_format_param_value(p) for p in param)
+    else:
+        # 其他类型转字符串
+        escaped = str(param).replace("'", "''")
+        return f"'{escaped}'"
