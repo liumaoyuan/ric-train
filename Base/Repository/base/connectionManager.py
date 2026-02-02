@@ -4,7 +4,7 @@
 """
 
 from typing import Dict, Optional
-from Base.Repository.base.mysqlConnection import DatabaseConnection
+from Base.Repository.base.baseConnection import BaseConnection as DatabaseConnection
 import logging
 
 logger = logging.getLogger(__name__)
@@ -94,19 +94,31 @@ class ConnectionManager:
 
 # 使用示例
 """
-from Base.Repository.adapters.mysqlAdapter import MySQLAdapter
+from Base.Repository.connections.mysqlConnection import MySQLConnection
 from Base.Repository.base.baseDBModel import BaseDBModel
 from Base.Repository.base.connectionManager import ConnectionManager
 
 # 1. 创建多个数据库连接
-read_db = MySQLAdapter(host="read-host", user="root", password="pass", database="read_db")
-write_db = MySQLAdapter(host="write-host", user="root", password="pass", database="write_db")
-order_db = MySQLAdapter(host="order-host", user="root", password="pass", database="order_db")
+read_db = MySQLConnection(
+    host="read-host", user="root", password="pass",
+    database="read_db", port=3306, charset="utf8mb4",
+    mincached=1, maxcached=5, maxconnections=10, blocking=False
+)
+write_db = MySQLConnection(
+    host="write-host", user="root", password="pass",
+    database="write_db", port=3306, charset="utf8mb4",
+    mincached=1, maxcached=5, maxconnections=10, blocking=False
+)
+order_db = MySQLConnection(
+    host="order-host", user="root", password="pass",
+    database="order_db", port=3306, charset="utf8mb4",
+    mincached=1, maxcached=5, maxconnections=10, blocking=False
+)
 
 # 2. 注册到连接管理器
-ConnectionManager.register("read", read_db.get_db_connection(), is_default=True)
-ConnectionManager.register("write", write_db.get_db_connection())
-ConnectionManager.register("order", order_db.get_db_connection())
+ConnectionManager.register("read", read_db, is_default=True)
+ConnectionManager.register("write", write_db)
+ConnectionManager.register("order", order_db)
 
 # 3. 设置默认连接
 BaseDBModel.set_default_db_connection(ConnectionManager.get_default())
@@ -122,4 +134,7 @@ user.update(name="李四")
 
 # 6. 查询操作使用读库
 user = User.get_by_id(1)  # 使用类的读库连接
+
+# 7. 关闭所有连接
+ConnectionManager.close_all()
 """

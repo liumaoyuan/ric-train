@@ -42,6 +42,9 @@ class SQLiteConnection(BaseConnection):
             blocking=False,
         )
 
+        # SQLite 特定配置
+        self.config["type"] = 'sqlite'
+
         # 初始化数据库
         self._ensure_database_exists()
         self._create_connection_pool()

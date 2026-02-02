@@ -43,6 +43,7 @@ class PostgreSQLConnection(BaseConnection):
         )
         # PostgreSQL 特定配置
         self.config["cursor_factory"] = RealDictCursor
+        self.config["type"] = 'postgresql'
 
         # 初始化连接池
         self._ensure_database_exists()

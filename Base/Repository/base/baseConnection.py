@@ -46,10 +46,10 @@ class BaseConnection(ABC):
             "charset": charset,
         }
         self.pool_config = {
-            "mincached": mincached,
-            "maxcached": maxcached,
-            "maxconnections": maxconnections,
-            "blocking": blocking,
+            "mincached": mincached,  # 连接池中最小空闲连接数，启动时创建
+            "maxcached": maxcached,  # 连接池中最大空闲连接数，超过此数的空闲连接会被关闭
+            "maxconnections": maxconnections,  # 连接池允许的最大连接数（包括空闲和正在使用的）
+            "blocking": blocking,  # 连接池满时是否阻塞等待，False则抛出异常
         }
         self._connection_pool = None
 

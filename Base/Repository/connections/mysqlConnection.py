@@ -43,6 +43,7 @@ class MySQLConnection(BaseConnection):
         )
         # MySQL 特定配置
         self.config["cursorclass"] = DictCursor
+        self.config["type"] = 'mysql'
 
         # 初始化连接池
         self._ensure_database_exists()
@@ -92,10 +93,22 @@ class MySQLConnection(BaseConnection):
         """创建连接池（MySQL 实现）"""
         try:
             from dbutils.pooled_db import PooledDB
+
+            # 创建使用 DictCursor 的 creator 函数
+            def dict_cursor_creator():
+                return pymysql.connect(
+                    cursorclass=DictCursor,
+                    **{k: v for k, v in self.config.items() if k not in ["cursorclass", "type"]}
+                )
+
+            # PooledDB 的参数：creator 或 (module, *args, **kwargs)
+            # 使用 creator 函数来确保所有连接都使用 DictCursor
             self._connection_pool = PooledDB(
-                pymysql,
-                **self.config,
-                **self.pool_config
+                creator=dict_cursor_creator,
+                maxconnections=self.pool_config['maxconnections'],
+                mincached=self.pool_config['mincached'],
+                maxcached=self.pool_config['maxcached'],
+                blocking=self.pool_config['blocking']
             )
             logger.info(f"MySQL 连接池创建成功: mincached={self.pool_config['mincached']}, maxconnections={self.pool_config['maxconnections']}")
         except ImportError:
@@ -104,10 +117,15 @@ class MySQLConnection(BaseConnection):
 
     def _get_raw_connection(self):
         """获取原生数据库连接（MySQL 实现）"""
+        # 过滤掉 pymysql 不支持的参数
+        connection_config = {
+            k: v for k, v in self.config.items()
+            if k not in ["cursorclass", "type"]
+        }
         return pymysql.connect(
             cursorclass=DictCursor,
             autocommit=False,
-            **{k: v for k, v in self.config.items() if k != "cursorclass"}
+            **connection_config
         )
 
     # ======================
@@ -128,23 +146,3 @@ class MySQLConnection(BaseConnection):
         return len(result) > 0
 
 
-def get_module_mysql_connection():
-    """获取Base模块的 MySQL 连接（单例）"""
-    return MySQLConnection(
-        host=settings.mysql.host,
-        user=settings.mysql.user,
-        password=settings.mysql.password,
-        database=settings.base_module.db_name,
-        port=3306,
-        charset="utf8mb4",
-        mincached=2,
-        maxcached=10,
-        maxconnections=20,
-        blocking=False,
-    )
-
-__all__ = ["get_module_mysql_connection"]
-
-if __name__ == '__main__':
-    conn = get_module_mysql_connection()
-    print(conn.table_exists("test_table"))

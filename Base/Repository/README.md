@@ -35,18 +35,18 @@ Repository 模块提供了一个完整的数据持久化解决方案，支持多
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    BaseDBModel (ORM)                      │
-│  - save(), get_by_id(), update(), delete()               │
-│  - find_by(), find_one_by(), get_all(), count()         │
-└────────────────────┬──────────────────────────────────────┘
+│                    BaseDBModel (ORM)                        │
+│  - save(), get_by_id(), update(), delete()                  │
+│  - find_by(), find_one_by(), get_all(), count()             │
+└────────────────────┬────────────────────────────────────────┘
                      │ 使用
                      ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              BaseConnection (抽象基类)                     │
-│  - 连接池管理                                            │
-│  - SQL 执行方法 (execute_query, update, insert)          │
-│  - 事务管理                                              │
-└────┬────────────────┬────────────────┬───────────────────┘
+│              BaseConnection (抽象基类)                       │
+│  - 连接池管理                                                │
+│  - SQL 执行方法 (execute)                                    │
+│  - 事务管理                                                  │
+└────┬────────────────┬────────────────┬──────────────────────┘
      │                │                │
      │ 继承           │ 继承           │ 继承
      ↓                ↓                ↓
@@ -58,14 +58,15 @@ Repository 模块提供了一个完整的数据持久化解决方案，支持多
 
 ### 模块职责
 
-| 模块 | 职责 | 说明 |
-|------|------|------|
-| `baseConnection.py` | 抽象基类 | 定义通用连接接口，实现连接池管理 |
-| `databaseConnection.py` | MySQL 实现 | MySQL 特定的连接逻辑 |
-| `postgresConnection.py` | PostgreSQL 实现 | PostgreSQL 特定的连接逻辑 |
-| `sqliteConnection.py` | SQLite 实现 | SQLite 特定的连接逻辑 |
-| `baseDBModel.py` | ORM 基类 | 提供模型操作接口 |
-| `connectionManager.py` | 连接管理器 | 管理多个数据库连接 |
+
+| 模块                    | 职责            | 说明                             |
+| ----------------------- | --------------- | -------------------------------- |
+| `baseConnection.py`     | 抽象基类        | 定义通用连接接口，实现连接池管理 |
+| `databaseConnection.py` | MySQL 实现      | MySQL 特定的连接逻辑             |
+| `postgresConnection.py` | PostgreSQL 实现 | PostgreSQL 特定的连接逻辑        |
+| `sqliteConnection.py`   | SQLite 实现     | SQLite 特定的连接逻辑            |
+| `baseDBModel.py`        | ORM 基类        | 提供模型操作接口                 |
+| `connectionManager.py`  | 连接管理器      | 管理多个数据库连接               |
 
 ---
 
@@ -78,6 +79,7 @@ Repository 模块提供了一个完整的数据持久化解决方案，支持多
 **作用**: 定义所有数据库连接的通用接口
 
 **核心方法**:
+
 ```python
 class BaseConnection(ABC):
     # 抽象方法（子类必须实现）
@@ -100,6 +102,7 @@ class BaseConnection(ABC):
 **作用**: MySQL 数据库的具体实现
 
 **特点**:
+
 - 连接池支持
 - 自动创建数据库
 - 字典游标
@@ -114,6 +117,7 @@ class BaseConnection(ABC):
 **作用**: PostgreSQL 数据库的具体实现
 
 **特点**:
+
 - 支持 psycopg2
 - 自动创建数据库
 - RealDictCursor 返回
@@ -125,6 +129,7 @@ class BaseConnection(ABC):
 **作用**: SQLite 数据库的具体实现
 
 **特点**:
+
 - 内存数据库支持 (`:memory:`)
 - 文件数据库支持
 - 单连接模式（不支持连接池）
@@ -136,12 +141,14 @@ class BaseConnection(ABC):
 **作用**: ORM 风格的模型基类
 
 **核心功能**:
+
 - 自动表名映射（类名或 table_alias）
 - CRUD 操作
 - 连接管理（三级优先级）
 - 事务支持
 
 **必须字段**:
+
 ```python
 class MyModel(BaseDBModel):
     id: Optional[int] = None  # 主键字段（必选）
@@ -154,6 +161,7 @@ class MyModel(BaseDBModel):
 **作用**: 管理多个数据库连接
 
 **使用场景**:
+
 - 读写分离
 - 分库分表
 - 多租户隔离
@@ -628,21 +636,23 @@ ConnectionManager.close_all()
 BaseDBModel 支持三级连接优先级（从高到低）：
 
 1. **实例级连接** (最高)
+
    ```python
    user.set_connection(db)
    ```
-
 2. **类级连接**
+
    ```python
    User.set_db_connection(db)
    ```
-
 3. **全局默认连接** (最低)
+
    ```python
    BaseDBModel.set_default_db_connection(db)
    ```
 
 **示例**:
+
 ```python
 # 设置全局默认
 BaseDBModel.set_default_db_connection(read_db)
@@ -800,10 +810,12 @@ db.close()
 ### 兼容性说明
 
 ✅ **向后兼容**
+
 - `DatabaseConnection` 是 `MySQLConnection` 的别名
 - `MySQLAdapter` 仍然可用（但已标记为废弃）
 
 ⚠️ **注意事项**
+
 - 新代码推荐直接使用 `MySQLConnection`
 - `DBAdapter` 可以考虑移除（职责过轻）
 
@@ -814,6 +826,7 @@ db.close()
 ### Q1: 如何选择使用哪个数据库？
 
 **A**: 根据场景选择：
+
 - **MySQL**: 成熟稳定，适合大多数应用
 - **PostgreSQL**: 需要复杂查询、JSON 支持
 - **SQLite**: 轻量级，适合测试、桌面应用
@@ -821,6 +834,7 @@ db.close()
 ### Q2: 连接池如何配置？
 
 **A**: 根据并发量调整：
+
 ```python
 db = MySQLConnection(
     ...,
@@ -834,6 +848,7 @@ db = MySQLConnection(
 ### Q3: 如何处理事务？
 
 **A**: 使用上下文管理器：
+
 ```python
 with db.get_connection_for_transaction() as conn:
     try:
@@ -847,6 +862,7 @@ with db.get_connection_for_transaction() as conn:
 ### Q4: BaseDBModel 如何设置连接？
 
 **A**: 三级优先级：
+
 ```python
 # 全局默认
 BaseDBModel.set_default_db_connection(db)
@@ -861,6 +877,7 @@ user.set_connection(db)
 ### Q5: 如何添加新数据库支持？
 
 **A**: 继承 BaseConnection：
+
 ```python
 class OracleConnection(BaseConnection):
     def _ensure_database_exists(self):
@@ -879,6 +896,7 @@ class OracleConnection(BaseConnection):
 ### Q6: MySQLAdapter 还能用吗？
 
 **A**: 可以，但不推荐：
+
 ```python
 # 仍然工作
 from Base.Repository.adapters.mysqlAdapter import MySQLAdapter
@@ -893,6 +911,7 @@ db = MySQLConnection(...)
 ### Q7: 如何实现读写分离？
 
 **A**: 使用不同连接：
+
 ```python
 BaseDBModel.set_default_db_connection(read_db)
 user.save()  # 查询用读库
@@ -904,6 +923,7 @@ user.update()  # 更新用写库
 ### Q8: 性能优化建议？
 
 **A**:
+
 - 使用连接池
 - 批量操作使用事务
 - 合理设置索引
@@ -915,12 +935,10 @@ user.update()  # 更新用写库
 ## 示例代码
 
 完整示例请查看：
+
 - `Base/Repository/examples/model_example.py` - 基本使用
 - `Base/Repository/examples/multi_db_example.py` - 多数据源
 - `Base/Repository/examples/connection_pool_test.py` - 连接池测试
 - `Base/Repository/examples/multi_database_example.py` - 多数据库类型
 
 ---
-
-
-
