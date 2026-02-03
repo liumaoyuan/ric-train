@@ -1,7 +1,6 @@
 from typing import Any, Dict, Optional, Generator, List
 import logging
 
-from Base.Ai.base import UserMessages, SystemMessages
 from Base.Ai.base.baseEnum import LLMTypeEnum
 from Base.Ai.base.baseLlm import BaseLlm
 from Base.Ai.base.baseSetting import DashScopeConfig
