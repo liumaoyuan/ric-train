@@ -114,11 +114,11 @@ class BaseEnvSettings(BaseSettings):
 # MySQL
 # =========================
 class MySQLSettings(BaseEnvSettings):
-    host: str
-    port: int = 3306
-    user: str
-    password: str
-    name: str
+    host: Optional[str] = None
+    port: Optional[int] = 3306
+    user: Optional[str] = None
+    password: Optional[str] = None
+    name: Optional[str] = None
     charset: str = "utf8mb4"
 
     model_config = SettingsConfigDict(
@@ -132,7 +132,7 @@ class MySQLSettings(BaseEnvSettings):
 # =========================
 class EmailSettings(BaseEnvSettings):
     sender_email: Optional[str] = Field(None, alias="SENDER_EMAIL")
-    password: str = Field(..., alias="EMAIL_PASSWORD")
+    password: Optional[str] = Field(None, alias="EMAIL_PASSWORD")
 
     model_config = SettingsConfigDict(extra="ignore")
 
@@ -151,10 +151,10 @@ class LLMSettings(BaseEnvSettings):
 # DashScope
 # =========================
 class DashScopeSettings(BaseEnvSettings):
-    api_url: str = Field(..., alias="DSC_API_URL")
-    api_key: str = Field(..., alias="DASHSCOPE_API_KEY")
-    base_url: str = Field(..., alias="QWEN_BASE_URL")
-    default_model: str = Field(..., alias="QWEN_DEFAULT_MODEL")
+    api_url: Optional[str] = Field(None, alias="DSC_API_URL")
+    api_key: Optional[str] = Field(None, alias="DASHSCOPE_API_KEY")
+    base_url: Optional[str] = Field(None, alias="QWEN_BASE_URL")
+    default_model: Optional[str] = Field(None, alias="QWEN_DEFAULT_MODEL")
     model_config = SettingsConfigDict(extra="ignore")
 
 
@@ -162,9 +162,9 @@ class DashScopeSettings(BaseEnvSettings):
 # DeepSeek
 # =========================
 class DeepSeekSettings(BaseEnvSettings):
-    api_key: str = Field(..., alias="DEEPSEEK_API_KEY")
-    base_url: str = Field(..., alias="DEEPSEEK_BASE_URL")
-    default_model: str = Field(..., alias="DEEPSEEK_DEFAULT_MODEL")
+    api_key: Optional[str] = Field(None, alias="DEEPSEEK_API_KEY")
+    base_url: Optional[str] = Field(None, alias="DEEPSEEK_BASE_URL")
+    default_model: Optional[str] = Field(None, alias="DEEPSEEK_DEFAULT_MODEL")
     model_config = SettingsConfigDict(extra="ignore")
 
 
@@ -187,7 +187,7 @@ class RedisSettings(BaseEnvSettings):
 # FFmpeg
 # =========================
 class FFmpegSettings(BaseEnvSettings):
-    path: str
+    path: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_prefix="FFMPEG_",
@@ -199,9 +199,9 @@ class FFmpegSettings(BaseEnvSettings):
 # MinIO
 # =========================
 class MinIOSettings(BaseEnvSettings):
-    access_key: str
-    secret_key: str
-    endpoint: str
+    access_key: Optional[str] = None
+    secret_key: Optional[str] = None
+    endpoint: Optional[str] = None
     asr_text_bucket_name: Optional[str] = Field(
         None, alias="MINIO_ASR_TEXT_BUCKET_NAME"
     )
@@ -216,13 +216,13 @@ class MinIOSettings(BaseEnvSettings):
 # Tencent COS
 # =========================
 class TencentCOSSettings(BaseEnvSettings):
-    secret_id: str
-    secret_key: str
-    region: str
+    secret_id: Optional[str] = None
+    secret_key: Optional[str] = None
+    region: Optional[str] = None
 
     token: Optional[str] = None
     scheme: str = "https"
-    bucket_name: str
+    bucket_name: Optional[str] = None
 
     proxy_http_ip: Optional[str] = None
     proxy_https_ip: Optional[str] = None
@@ -236,7 +236,7 @@ class TencentCOSSettings(BaseEnvSettings):
 # Base module
 # =========================
 class BaseModuleSettings(BaseEnvSettings):
-    db_name: str
+    db_name: Optional[str] = None
 
 
     model_config = SettingsConfigDict(
