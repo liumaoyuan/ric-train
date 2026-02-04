@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 from Base.Ai.base.baseEnum import LLMTypeEnum
 from Base.Ai.base.baseLlm import BaseLlm
@@ -14,6 +14,20 @@ class DeepSeekLlm(BaseLlm):
     使用 OpenAI 兼容接口调用 DeepSeek 模型。
     支持同步/异步调用、流式/非流式输出。
     """
+
+    @property
+    def supports_embedding(self) -> bool:
+        return False
+
+    @property
+    def supports_asr(self) -> bool:
+        return False
+
+    def _asr(self):
+        pass
+
+    def _embedding(self, text: str | list[str], **kwargs: Any) -> List[float] | List[List[float]]:
+        pass
 
     # DeepSeek 模型的上下文窗口大小（token 数）
     CONTEXT_WINDOW = {

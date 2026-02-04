@@ -40,7 +40,7 @@ class AsrClient:
         """
         logger.info("正在发起ASR请求....")
         response = dashscope.MultiModalConversation.call(
-            api_key=os.getenv("DASHSCOPE_API_KEY"),
+            api_key=settings.dashscope.api_key,
             model="qwen3-asr-flash",
             messages= messages or self._ez_msg(audio_file_path, content),
             result_format="message",

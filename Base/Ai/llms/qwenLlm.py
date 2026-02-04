@@ -5,6 +5,7 @@ from Base.Ai.base.baseEnum import LLMTypeEnum
 from Base.Ai.base.baseLlm import BaseLlm
 from Base.Ai.base.baseSetting import DashScopeConfig
 from Base.Config.setting import settings
+from Base.RicUtils.audioFileUtils import AudioFileHandler
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,42 @@ class QwenLlm(BaseLlm):
     使用 OpenAI 兼容接口调用 Qwen 模型。
     支持同步/异步调用、流式/非流式输出。
     """
+
+    @property
+    def supports_asr(self) -> bool:
+        return True
+
+    def _asr(self, audio_file_path: str, **kwargs: Any):
+        # 将音频文件转换为 Data URI 格式
+        data_uri = AudioFileHandler.audio_file_to_data_uri(audio_file_path)
+        messages = [
+            {
+                "content": [
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": data_uri
+                        }
+                    }
+                ],
+                "role": "user"
+            }
+        ]
+        response = self.model_client.chat.completions.create(
+            model=kwargs.get('asr_model_name') or self.config.asr_model_name,
+            messages=messages,
+            extra_body={
+                "asr_options": {
+                    "language": "zh",
+                    "enable_itn": False
+                }
+            },
+            stream=False
+            # **kwargs
+        )
+        if response:
+            return response.choices[0].message.content
+        return response
 
     @property
     def supports_embedding(self) -> bool:
@@ -70,7 +107,7 @@ class QwenLlm(BaseLlm):
             api_key=api_key or settings.dashscope.api_key,
             base_url=base_url or settings.dashscope.base_url,
             model=model or settings.dashscope.default_model,
-            config=DashScopeConfig(),
+            config=config or DashScopeConfig(),
             default_params=default_params,
             base_url_error_msg="未配置Qwen模型的Base_Url"
         )
@@ -259,6 +296,11 @@ if __name__ == '__main__':
     info = llm.get_model_info()
     for k, v in info.items():
         print(f"{k}: {v}")
+
+    _file_path = r'C:\Users\11243\Desktop\test.m4a'
+
+    res = llm.asr(_file_path)
+    print(res)
 
     # 测试思考模式
     # print("\n=== 测试思考模式 ===")

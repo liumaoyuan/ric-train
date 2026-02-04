@@ -273,8 +273,27 @@ class BaseLlm(ABC):
     def supports_embedding(self) -> bool:
         pass
 
+    @property
     @abstractmethod
-    def _embedding(self, text: str| list[str], **kwargs: Any) -> List[float]:
+    def supports_asr(self) -> bool:
+        pass
+
+    @abstractmethod
+    def _asr(self, audio_file_path: str, **kwargs: Any):
+        pass
+
+    def asr(self, audio_file_path: str, **kwargs: Any):
+        """
+        ASR 服务支持
+        :return:
+        """
+        if self.supports_asr:
+            return self._asr(audio_file_path, **self.default_params, **kwargs)
+        else:
+            raise NotImplementedError(f"{self.model_name}模型不支持ASR")
+
+    @abstractmethod
+    def _embedding(self, text: str | list[str], **kwargs: Any) -> List[float] | List[List[float]]:
         """
         用于继承
         :param text:
@@ -284,10 +303,16 @@ class BaseLlm(ABC):
         pass
 
     def embedding(self, text: str | list[str], **kwargs: Any) -> List[float] | List[List[float]]:
+        """
+        Embedding 服务支持
+        :param text:
+        :param kwargs:
+        :return:
+        """
         if self.supports_embedding:
-            return self._embedding(text, **self.default_params , **kwargs)
+            return self._embedding(text, **self.default_params, **kwargs)
         else:
-            raise NotImplementedError("模型不支持嵌入")
+            raise NotImplementedError(f"{self.model_name}模型不支持嵌入")
 
     @property
     @abstractmethod

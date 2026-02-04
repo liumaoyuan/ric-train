@@ -55,6 +55,9 @@ class LLMConfig:
     embedding_model_name: str = None
     """嵌入模型名称"""
 
+    asr_model_name: str = None
+    """ASR模型名称"""
+
     def to_dict(self) -> Dict[str, Any]:
         """
         将配置转换为字典，过滤掉 None 值
@@ -105,12 +108,14 @@ class DashScopeConfig(LLMConfig):
         api_key = api_key or settings.dashscope.api_key
         model = model or settings.dashscope.default_model
         embedding_model_name = settings.dashscope.embedding_model_name
+        asr_model_name = settings.dashscope.asr_model_name
 
         super().__init__(
             model=model,
             api_key=api_key,
             base_url=base_url,
             embedding_model_name = embedding_model_name,
+            asr_model_name = asr_model_name,
             **kwargs
         )
 

@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 import uuid
+import base64
 
 from Base.Config.setting import settings
 from Base.RicUtils.decoratorUtils import  after_exec_4c, params_handle_4c
@@ -10,6 +11,17 @@ from Base.RicUtils.decoratorUtils import  after_exec_4c, params_handle_4c
 logger = logging.getLogger(__name__)
 FFMPEG_PATH = settings.ffmpeg.path
 
+# 音频格式的 MIME 类型映射
+MIME_TYPES = {
+    '.wav': 'audio/wav',
+    '.mp3': 'audio/mpeg',
+    '.m4a': 'audio/mp4',
+    '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac',
+    '.aac': 'audio/aac',
+    '.wma': 'audio/x-ms-wma',
+    '.amr': 'audio/amr',
+}
 
 class AudioFileHandler:
 
@@ -108,6 +120,34 @@ class AudioFileHandler:
         except subprocess.CalledProcessError as e:
             logger.info(f"❌ 切割失败：{e}")
             return None
+
+    @staticmethod
+    def audio_file_to_data_uri(audio_file_path: str) -> str:
+        """
+        将音频文件转换为 Data URI 格式
+        :param audio_file_path: 音频文件路径
+        :return: Data URI 格式的字符串，格式为：data:<mediatype>;base64,<data>
+        """
+        # 读取音频文件并转换为 base64 编码
+        try:
+            with open(audio_file_path, 'rb') as audio_file:
+                audio_data = audio_file.read()
+                audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+        except FileNotFoundError:
+            logger.error(f"音频文件未找到: {audio_file_path}")
+            raise FileNotFoundError(f"音频文件未找到: {audio_file_path}")
+        except Exception as e:
+            logger.error(f"读取音频文件失败: {e}")
+            raise
+
+        # 根据文件扩展名确定 MIME 类型
+        file_ext = os.path.splitext(audio_file_path)[1].lower()
+        mime_type = MIME_TYPES.get(file_ext, 'audio/wav')  # 默认使用 wav
+        
+        # 构建 Data URI: data:<mediatype>;base64,<data>
+        data_uri = f"data:{mime_type};base64,{audio_base64}"
+        
+        return data_uri
 
     @staticmethod
     def sample_fmt(input_audio_path: str, output_filename: str = None, sample_rate: int = 16000, sample_fmt: str = "s16"):
