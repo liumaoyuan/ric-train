@@ -1,12 +1,10 @@
 import logging
 import sys
 from logging.handlers import TimedRotatingFileHandler
-from dotenv import load_dotenv
-import os
 
+from Base.Config.setting import settings
 from Base.RicUtils.pathUtils import find_project_root
 
-load_dotenv()
 
 
 class ColoredFormatter(logging.Formatter):
@@ -66,7 +64,7 @@ def get_log_level_from_env():
         int: 日志级别对应的数值
     """
     # 从环境变量获取日志级别，默认为INFO
-    log_level_str = os.getenv('LOG_LEVEL', 'INFO').upper()
+    log_level_str = settings.log_level
 
     # 日志级别映射
     log_levels = {

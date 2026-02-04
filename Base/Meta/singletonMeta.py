@@ -32,8 +32,8 @@ if __name__ == "__main__":
         pass
 
     p1 = Person()
-    # p2 = Person()
+    p2 = Person()
     w1 = Woman()
-    # print(p1 == p2)
+    print(p1 == p2)
     print(p1 == w1)
     print(bool("None" and 1))
