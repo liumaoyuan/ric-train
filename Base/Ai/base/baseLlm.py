@@ -270,6 +270,27 @@ class BaseLlm(ABC):
 
     @property
     @abstractmethod
+    def supports_embedding(self) -> bool:
+        pass
+
+    @abstractmethod
+    def _embedding(self, text: str| list[str], **kwargs: Any) -> List[float]:
+        """
+        用于继承
+        :param text:
+        :param kwargs:
+        :return:
+        """
+        pass
+
+    def embedding(self, text: str | list[str], **kwargs: Any) -> List[float] | List[List[float]]:
+        if self.supports_embedding:
+            return self._embedding(text, **self.default_params , **kwargs)
+        else:
+            raise NotImplementedError("模型不支持嵌入")
+
+    @property
+    @abstractmethod
     def context_window(self) -> int:
         """获取模型的上下文窗口大小"""
         pass

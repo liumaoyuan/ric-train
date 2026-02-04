@@ -18,6 +18,21 @@ class QwenLlm(BaseLlm):
     支持同步/异步调用、流式/非流式输出。
     """
 
+    @property
+    def supports_embedding(self) -> bool:
+        return True
+
+    def _embedding(self, text: str, dimensions: int = 1024, **kwargs: Any) -> List[float]:
+
+        vec_res = self.model_client.embeddings.create(
+            model=kwargs.get('embedding_model_name') or self.config.embedding_model_name,
+            input=text,
+            dimensions=dimensions,
+            encoding_format="float",
+            # **kwargs
+        )
+        return [i.embedding for i in vec_res.data]
+
     # Qwen 模型的上下文窗口大小（token 数）
     CONTEXT_WINDOW = {
         "qwen-turbo": 8192,
@@ -55,7 +70,7 @@ class QwenLlm(BaseLlm):
             api_key=api_key or settings.dashscope.api_key,
             base_url=base_url or settings.dashscope.base_url,
             model=model or settings.dashscope.default_model,
-            config=config,
+            config=DashScopeConfig(),
             default_params=default_params,
             base_url_error_msg="未配置Qwen模型的Base_Url"
         )
@@ -246,17 +261,17 @@ if __name__ == '__main__':
         print(f"{k}: {v}")
 
     # 测试思考模式
-    print("\n=== 测试思考模式 ===")
-    res = llm.invoke("讲一个笑话", enable_thinking=True, model="qwen-plus", stream=True)
-    print("\n" + "=" * 20 + "思考过程" + "=" * 20)
-    for chunk in res:
-        if chunk["type"] == "reasoning":
-            print(chunk["content"], end="", flush=True)
-        elif chunk["type"] == "separator":
-            print("\n" + "=" * 20 + "完整回复" + "=" * 20)
-        elif chunk["type"] == "content":
-            print(chunk["content"], end="", flush=True)
-    print()  # 换行
+    # print("\n=== 测试思考模式 ===")
+    # res = llm.invoke("讲一个笑话", enable_thinking=True, model="qwen-plus", stream=True)
+    # print("\n" + "=" * 20 + "思考过程" + "=" * 20)
+    # for chunk in res:
+    #     if chunk["type"] == "reasoning":
+    #         print(chunk["content"], end="", flush=True)
+    #     elif chunk["type"] == "separator":
+    #         print("\n" + "=" * 20 + "完整回复" + "=" * 20)
+    #     elif chunk["type"] == "content":
+    #         print(chunk["content"], end="", flush=True)
+    # print()  # 换行
 
     # 测试非思考模式（非流式）
     # print("\n=== 测试非思考模式（非流式）===")

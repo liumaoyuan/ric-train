@@ -156,6 +156,7 @@ class DashScopeSettings(BaseEnvSettings):
     base_url: Optional[str] = Field(None, alias="QWEN_BASE_URL")
     default_model: Optional[str] = Field(None, alias="QWEN_DEFAULT_MODEL")
     model_config = SettingsConfigDict(extra="ignore")
+    embedding_model_name: Optional[str] = Field(None, alias="EMBEDDING_MODEL_NAME")
 
 
 # =========================

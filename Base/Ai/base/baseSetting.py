@@ -52,6 +52,9 @@ class LLMConfig:
     additional_params: Dict[str, Any] = field(default_factory=dict)
     """其他额外参数"""
 
+    embedding_model_name: str = None
+    """嵌入模型名称"""
+
     def to_dict(self) -> Dict[str, Any]:
         """
         将配置转换为字典，过滤掉 None 值
@@ -101,11 +104,13 @@ class DashScopeConfig(LLMConfig):
         base_url = base_url or settings.dashscope.base_url
         api_key = api_key or settings.dashscope.api_key
         model = model or settings.dashscope.default_model
+        embedding_model_name = settings.dashscope.embedding_model_name
 
         super().__init__(
             model=model,
             api_key=api_key,
             base_url=base_url,
+            embedding_model_name = embedding_model_name,
             **kwargs
         )
 

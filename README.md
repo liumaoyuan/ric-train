@@ -34,3 +34,5 @@ docker run --name wolin-ai -p 8000:8000 --env-file .env --restart unless-stopped
   
 
 uvicorn Wolin.main:app --host 0.0.0.0 --port 8001
+
+pip freeze > requirements.txt
