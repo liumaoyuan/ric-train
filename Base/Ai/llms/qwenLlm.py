@@ -20,6 +20,37 @@ class QwenLlm(BaseLlm):
     """
 
     @property
+    def supports_ocr(self) -> bool:
+        return True
+
+    def _ocr(self, img_file_path: str, prompt: str = None, **kwargs: Any):
+        data_uri = AudioFileHandler.audio_file_to_data_uri(img_file_path)
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": data_uri},
+                        # 输入图像的最小像素阈值，小于该值图像会进行放大，直到总像素大于min_pixels
+                        "min_pixels": 32 * 32 * 3,
+                        # 输入图像的最大像素阈值，超过该值图像会进行缩小，直到总像素低于max_pixels
+                        "max_pixels": 32 * 32 * 8192
+                    },
+                    # 模型支持在text字段中传入Prompt，若未传入，则会使用默认的Prompt：Please output only the text content from the image without any additional descriptions or formatting.
+                    {"type": "text",
+                     "text": prompt or "Please output only the text content from the image without any additional descriptions or formatting."}
+                ]
+            }
+        ]
+        response = self.model_client.chat.completions.create(
+            model= kwargs.get('ocr_model_name') or self.config.ocr_model_name,
+            messages=messages,
+        )
+        return response.choices[0].message.content
+
+    @property
     def supports_asr(self) -> bool:
         return True
 
@@ -60,7 +91,6 @@ class QwenLlm(BaseLlm):
         return True
 
     def _embedding(self, text: str, dimensions: int = 1024, **kwargs: Any) -> List[float]:
-
         vec_res = self.model_client.embeddings.create(
             model=kwargs.get('embedding_model_name') or self.config.embedding_model_name,
             input=text,
@@ -298,8 +328,9 @@ if __name__ == '__main__':
         print(f"{k}: {v}")
 
     _file_path = r'C:\Users\11243\Desktop\test.m4a'
+    _img_file_path = r'C:\Users\11243\Desktop\test.png'
 
-    res = llm.asr(_file_path)
+    res = llm.ocr(_img_file_path)
     print(res)
 
     # 测试思考模式

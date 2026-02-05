@@ -16,6 +16,13 @@ class DeepSeekLlm(BaseLlm):
     """
 
     @property
+    def supports_ocr(self) -> bool:
+        return False
+
+    def _ocr(self, prompt: str, img_file_path: str, **kwargs: Any):
+        pass
+
+    @property
     def supports_embedding(self) -> bool:
         return False
 

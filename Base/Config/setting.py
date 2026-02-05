@@ -158,7 +158,7 @@ class DashScopeSettings(BaseEnvSettings):
     model_config = SettingsConfigDict(extra="ignore")
     embedding_model_name: Optional[str] = Field(None, alias="QWEN_EMBEDDING_MODEL_NAME")
     asr_model_name: Optional[str] = Field(None, alias="QWEN_ASR_MODEL_NAME")
-
+    ocr_model_name: Optional[str] = Field(None, alias="QWEN_OCR_MODEL_NAME")
 
 # =========================
 # DeepSeek

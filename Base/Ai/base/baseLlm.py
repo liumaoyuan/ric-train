@@ -278,8 +278,29 @@ class BaseLlm(ABC):
     def supports_asr(self) -> bool:
         pass
 
+    @property
+    @abstractmethod
+    def supports_ocr(self) -> bool:
+        pass
+
+    @abstractmethod
+    def _ocr(self, img_file_path: str, prompt: str, **kwargs: Any):
+        pass
+
+    def ocr(self, img_file_path: str, prompt: str = None, **kwargs: Any):
+        if self.supports_ocr:
+            return self._ocr(img_file_path, prompt, **self.default_params, **kwargs)
+        else:
+            raise NotImplementedError(f"{self.model_name}模型不支持OCR")
+
     @abstractmethod
     def _asr(self, audio_file_path: str, **kwargs: Any):
+        """
+        用于继承
+        :param audio_file_path:
+        :param kwargs:
+        :return:
+        """
         pass
 
     def asr(self, audio_file_path: str, **kwargs: Any):
