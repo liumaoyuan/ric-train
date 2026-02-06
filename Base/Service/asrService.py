@@ -1,7 +1,7 @@
 import logging
 import os
 
-from Base.Client import asr_client
+from Base.Client import get_asr_client
 from Base.RicUtils.audioFileUtils import AudioFileHandler
 from Base.RicUtils.redisUtils import cache_with_params
 
@@ -24,7 +24,7 @@ def audio_file_2_text_with_cache(audio_path: str, max_workers: int = 50):
                                                                  , max_segment_duration=100
                                                                  , overlap_duration=2
                                                                  , output_format='wav')
-        result = asr_client.audio_2_text(file_path=temp_file_list,max_workers=max_workers)
+        result = get_asr_client().audio_2_text(file_path=temp_file_list,max_workers=max_workers)
 
         return result
     except Exception as e:

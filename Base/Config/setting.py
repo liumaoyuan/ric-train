@@ -215,6 +215,28 @@ class MinIOSettings(BaseEnvSettings):
 
 
 # =========================
+# Milvus 向量数据库
+# =========================
+class MilvusSettings(BaseEnvSettings):
+    host: Optional[str] = None
+    port: Optional[int] = 19530
+    uri: Optional[str] = None
+    user: Optional[str] = None
+    password: Optional[str] = None
+    database: Optional[str] = "default"
+    timeout: Optional[int] = 10
+    collection_name: Optional[str] = "demo_collection"
+    vector_dim: Optional[int] = 1024
+    secure: Optional[bool] = False
+    alias: Optional[str] = "default"
+
+    model_config = SettingsConfigDict(
+        env_prefix="MILVUS_",
+        extra="ignore",
+    )
+
+
+# =========================
 # Tencent COS
 # =========================
 class TencentCOSSettings(BaseEnvSettings):
@@ -266,6 +288,7 @@ class Settings(BaseEnvSettings):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     ffmpeg: FFmpegSettings = Field(default_factory=FFmpegSettings)
     minio: MinIOSettings = Field(default_factory=MinIOSettings)
+    milvus: MilvusSettings = Field(default_factory=MilvusSettings)
     tencent_cos: TencentCOSSettings = Field(default_factory=TencentCOSSettings)
     base_module: BaseModuleSettings = Field(default_factory=BaseModuleSettings)
 
