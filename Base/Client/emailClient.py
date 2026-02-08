@@ -29,7 +29,7 @@ def send_email(
     receiver_emails,
     subject,
     body,
-    sender_password = settings._email.password,
+    sender_password = settings.email.password,
     smtp_server: str = 'smtp.qq.com',
     smtp_port: int = 465,
     is_html=False,
