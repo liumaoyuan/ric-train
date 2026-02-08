@@ -143,6 +143,9 @@ class BaseLlm(ABC):
         """
         try:
             params = self._prepare_params(**kwargs, stream=stream)
+            del params['embedding_model_name']
+            del params['asr_model_name']
+            del params['ocr_model_name']
             response = self.model_client.chat.completions.create(
                 messages=messages,
                 **params
