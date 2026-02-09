@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional, Generator, List
 import logging
 
+from Base.Ai.base import SystemMessages, UserMessages
 from Base.Ai.base.baseEnum import LLMTypeEnum
 from Base.Ai.base.baseLlm import BaseLlm
 from Base.Ai.base.baseSetting import DashScopeConfig
@@ -45,7 +46,7 @@ class QwenLlm(BaseLlm):
             }
         ]
         response = self.model_client.chat.completions.create(
-            model= kwargs.get('ocr_model_name') or self.config.ocr_model_name,
+            model= kwargs.get('ocr_model_name') or settings.dashscope.ocr_model_name,
             messages=messages,
         )
         return response.choices[0].message.content
@@ -71,7 +72,7 @@ class QwenLlm(BaseLlm):
             }
         ]
         response = self.model_client.chat.completions.create(
-            model=kwargs.get('asr_model_name') or self.config.asr_model_name,
+            model=kwargs.get('asr_model_name') or settings.dashscope.asr_model_name,
             messages=messages,
             extra_body={
                 "asr_options": {
@@ -92,7 +93,7 @@ class QwenLlm(BaseLlm):
 
     def _embedding(self, text: str, dimensions: int = 1024, **kwargs: Any) -> List[float]:
         vec_res = self.model_client.embeddings.create(
-            model=kwargs.get('embedding_model_name') or self.config.embedding_model_name,
+            model=kwargs.get('embedding_model_name') or settings.dashscope.embedding_model_name,
             input=text,
             dimensions=dimensions,
             encoding_format="float",
@@ -330,7 +331,7 @@ if __name__ == '__main__':
     _file_path = r'C:\Users\11243\Desktop\test.m4a'
     _img_file_path = r'C:\Users\11243\Desktop\test.png'
 
-    res = llm.ocr(_img_file_path)
+    res = llm.asr(_file_path)
     print(res)
 
     # 测试思考模式
