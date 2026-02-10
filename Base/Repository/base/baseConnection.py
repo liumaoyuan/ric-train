@@ -52,6 +52,8 @@ class BaseConnection(ABC):
             "blocking": blocking,  # 连接池满时是否阻塞等待，False则抛出异常
         }
         self._connection_pool = None
+        # 标识符：数据库连接是否可用
+        self._is_available = True
 
     # ======================
     # 抽象方法（必须由子类实现）
@@ -78,6 +80,10 @@ class BaseConnection(ABC):
 
     def get_connection(self):
         """从连接池获取一个数据库连接"""
+        # 如果连接不可用，直接抛出异常
+        if not self._is_available:
+            raise RuntimeError("数据库连接不可用，已标记为不可用状态")
+        
         if self._connection_pool is not None:
             return self._connection_pool.connection()
         else:
@@ -86,6 +92,11 @@ class BaseConnection(ABC):
     @contextmanager
     def get_connection_context(self):
         """获取连接的上下文管理器，自动归还连接到池中"""
+        # 如果连接不可用，直接返回 None
+        if not self._is_available:
+            yield None
+            return
+        
         conn = self.get_connection()
         try:
             yield conn
@@ -123,13 +134,38 @@ class BaseConnection(ABC):
             >>> conn.execute("INSERT INTO users (name) VALUES (%s)", ("Alice",), "insert")
             >>> conn.execute("UPDATE users SET name = %s WHERE id = %s", ("Bob", 1))
         """
+        # 优先检查连接是否可用，避免无意义的尝试
+        if not self._is_available:
+            logger.debug(f"数据库连接不可用，跳过操作: {operation_type if operation_type else 'auto-detect'}")
+            # 返回适当的默认值
+            if operation_type is None:
+                operation_type = self._detect_operation_type(sql)
+            if operation_type == OperationType.QUERY:
+                return []
+            elif operation_type == OperationType.INSERT:
+                return -1
+            else:  # UPDATE, DELETE, EXECUTE
+                return 0
+
         if operation_type is None:
             operation_type = self._detect_operation_type(sql)
 
         # 记录 SQL 执行日志
         self._log_sql_execution(sql, params, operation_type)
 
-        conn = self.get_connection()
+        try:
+            conn = self.get_connection()
+        except Exception as e:
+            logger.warning(f"获取数据库连接失败，标记连接为不可用：{e}")
+            self._is_available = False
+            # 返回适当的默认值
+            if operation_type == OperationType.QUERY:
+                return []
+            elif operation_type == OperationType.INSERT:
+                return -1
+            else:  # UPDATE, DELETE, EXECUTE
+                return 0
+
         try:
             with conn.cursor() as cur:
                 cur.execute(sql, params or ())
@@ -156,10 +192,17 @@ class BaseConnection(ABC):
                         logger.debug(f"未提交事务，影响行数: {affected}")
                     return affected
         except Exception as e:
-            logger.error(f"SQL 执行失败: {e}")
-            logger.error(f"失败 SQL: {sql}")
-            logger.error(f"参数: {params}")
-            raise
+            logger.warning(f"SQL 执行失败，标记连接为不可用：{e}")
+            self._is_available = False
+            logger.debug(f"失败 SQL: {sql}")
+            logger.debug(f"参数: {params}")
+            # 返回适当的默认值
+            if operation_type == OperationType.QUERY:
+                return []
+            elif operation_type == OperationType.INSERT:
+                return -1
+            else:  # UPDATE, DELETE, EXECUTE
+                return 0
         finally:
             conn.close()
 
@@ -244,6 +287,10 @@ class BaseConnection(ABC):
             yield conn
         finally:
             conn.close()  # 事务结束后归还连接到连接池
+
+    def is_available(self) -> bool:
+        """检查数据库连接是否可用"""
+        return self._is_available
 
     def close(self) -> None:
         """关闭连接池（释放所有连接）"""

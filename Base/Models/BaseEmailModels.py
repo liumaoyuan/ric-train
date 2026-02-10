@@ -15,6 +15,8 @@ class BaseEmailModels(BaseModuleDBModel):
         id INT AUTO_INCREMENT PRIMARY KEY,
         sender_email VARCHAR(255) NOT NULL COMMENT '发件人邮箱',
         receiver_emails TEXT NOT NULL COMMENT '收件人邮箱列表，逗号分隔',
+        receiver_info VARCHAR(500) NOT NULL COMMENT '收件人信息',
+        email_type VARCHAR(20) NOT NULL COMMENT '邮件类型: normal/system',
         subject VARCHAR(500) NOT NULL COMMENT '邮件主题',
         body TEXT NOT NULL COMMENT '邮件正文',
         is_html TINYINT(1) DEFAULT 0 COMMENT '是否HTML格式: 0=纯文本, 1=HTML',
@@ -37,6 +39,8 @@ class BaseEmailModels(BaseModuleDBModel):
     id: Optional[int] = Field(None, description="主键ID")
     sender_email: str = Field('', description="发件人邮箱")
     receiver_emails: str = Field('', description="收件人邮箱列表，逗号分隔")
+    receiver_info: str = Field('', description="收件人信息")
+    email_type: str = Field('normal', description="邮件类型: normal/system")
     subject: str = Field('', description="邮件主题")
     body: str = Field('', description="邮件正文")
     is_html: bool = Field(False, description="是否HTML格式")

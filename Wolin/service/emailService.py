@@ -2,7 +2,7 @@ import os
 
 from dotenv import load_dotenv
 
-from Base.Client.emailClient import send_email
+from Base.Service.emailService import send_email
 from Base.Config.setting import settings
 from Base.RicUtils.dateUtils import get_current_date
 from Wolin.service.base import service_logger
@@ -24,6 +24,7 @@ class EmailService:
                          subject:str,
                          email_content:str,
                          receiver_emails: list[str] = None,
+                         receiver_info: str = None,
                          is_html:bool=False,
                          attachments= None,
                          inline_images=None):
@@ -32,6 +33,7 @@ class EmailService:
         :param subject: 邮件标题
         :param email_content: 邮件内容
         :param receiver_emails: 收件人邮箱
+        :param receiver_info: 收件人信息
         :param is_html:  是否是HTML格式
         :param attachments: 附件
         :param inline_images: 图片
@@ -39,6 +41,8 @@ class EmailService:
         """
         send_email(sender_email=self.sender_email,
                    receiver_emails=receiver_emails or self.receiver_emails,
+                   receiver_info=receiver_info,
+                   email_type='InterviewAnalysis',
                    subject=subject,
                    body=email_content,
                    is_html=is_html,
@@ -68,6 +72,7 @@ class EmailService:
                 subject=f"面试报告 {get_current_date()}",
                 email_content=content,
                 receiver_emails=user_email,
+                receiver_info=name,
                 is_html=True,
                 attachments=report_path,
                 inline_images=[("Wolin/static/wolin.jpg", "wolin")]
@@ -80,4 +85,4 @@ email_service = EmailService()
 
 if __name__ == '__main__':
 
-    email_service.send_emails_base(subject='❤情书❤', email_content="测试邮件")
+    email_service.send_emails_4_ia(user_name='刘硕',ia_id='123456',report_path='Wolin/static/report.pdf',user_email=['2366692214@qq.com', '1053851332@qq.com'])

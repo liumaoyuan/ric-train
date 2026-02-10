@@ -37,7 +37,7 @@ def send_email(
     inline_images=None,
     timeout: int = 30,  # SMTP 连接超时时间（秒）
     max_retries: int = 2  # 最大重试次数
-):
+) -> bool:
     """
     使用SMTP发送邮件的封装函数。
 
@@ -159,6 +159,7 @@ def send_email(
                 logger.error(f"邮件发送失败：{e}\n{traceback.format_exc()}")
                 raise  # 非SMTP相关错误直接抛出
 
+        return True
     except Exception as e:
         import traceback
         logger.error(f"邮件发送失败：{e}\n{traceback.format_exc()}")

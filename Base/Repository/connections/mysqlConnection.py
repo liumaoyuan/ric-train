@@ -45,16 +45,20 @@ class MySQLConnection(BaseConnection):
         self.config["cursorclass"] = DictCursor
         self.config["type"] = 'mysql'
 
-        # 初始化连接池
-        self._ensure_database_exists()
-        self._create_connection_pool()
+        # 初始化连接池（如果失败则记录日志但不抛出异常）
+        try:
+            self._ensure_database_exists()
+            self._create_connection_pool()
+        except Exception as e:
+            logger.warning(f"MySQL 连接初始化失败，相关功能将无法持久化：{str(e)}")
+            self._is_available = False
 
     # ======================
     # MySQL 特定实现
     # ======================
 
     def _ensure_database_exists(self):
-        """如果数据库不存在，则自动创建（MySQL 实现）"""
+        """如果数据库不存在，则自动创建（MySQL 实现），失败则记录日志"""
         db_name = self.config["database"]
 
         try:
@@ -86,11 +90,12 @@ class MySQLConnection(BaseConnection):
 
             temp_conn.close()
         except Exception as e:
-            logger.error(f"检查/创建数据库 {db_name} 失败：{e}")
-            raise
+            logger.warning(f"检查/创建数据库 {db_name} 失败：{e}")
+            # 标记连接为不可用
+            self._is_available = False
 
     def _create_connection_pool(self):
-        """创建连接池（MySQL 实现）"""
+        """创建连接池（MySQL 实现），失败则记录日志"""
         try:
             from dbutils.pooled_db import PooledDB
 
@@ -114,6 +119,10 @@ class MySQLConnection(BaseConnection):
         except ImportError:
             logger.warning("DBUtils 未安装，使用单连接模式。请执行: pip install DBUtils")
             self._connection_pool = None
+        except Exception as e:
+            logger.warning(f"创建 MySQL 连接池失败：{e}")
+            self._connection_pool = None
+            self._is_available = False
 
     def _get_raw_connection(self):
         """获取原生数据库连接（MySQL 实现）"""

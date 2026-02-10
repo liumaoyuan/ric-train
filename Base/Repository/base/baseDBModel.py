@@ -114,36 +114,51 @@ class BaseDBModel(BaseModel, ABC):
         self._instance_db_connection = db_connection
         logger.debug(f"为 {self.__class__.__name__} 实例设置数据库连接")
     
-    def get_connection(self) -> BaseConnection:
-        """获取数据库连接（优先级：实例 > 类 > 默认）"""
+    def get_connection(self) -> Optional[BaseConnection]:
+        """获取数据库连接（优先级：实例 > 类 > 默认），如果未设置则返回 None"""
         # 优先级1：实例级别的连接
         if self._instance_db_connection is not None:
+            # 检查连接是否可用
+            if hasattr(self._instance_db_connection, 'is_available') and not self._instance_db_connection.is_available():
+                logger.debug(f"实例级别的数据库连接不可用，操作将被跳过")
+                return None
             return self._instance_db_connection
         # 优先级2：类级别的连接
         if self.__class__._db_connection is not None:
+            # 检查连接是否可用
+            if hasattr(self.__class__._db_connection, 'is_available') and not self.__class__._db_connection.is_available():
+                logger.debug(f"类级别的数据库连接不可用，操作将被跳过")
+                return None
             return self.__class__._db_connection
         # 优先级3：全局默认连接
         if self.__class__._default_db_connection is not None:
+            # 检查连接是否可用
+            if hasattr(self.__class__._default_db_connection, 'is_available') and not self.__class__._default_db_connection.is_available():
+                logger.debug(f"全局默认数据库连接不可用，操作将被跳过")
+                return None
             return self.__class__._default_db_connection
-        raise RuntimeError(
-            f"数据库连接未设置。请使用以下方法之一：\n"
-            f"1. BaseDBModel.set_default_db_connection() - 设置全局默认连接\n"
-            f"2. {self.__class__.__name__}.set_db_connection() - 为该类设置连接\n"
-            f"3. model.set_connection() - 为实例设置连接"
-        )
+        # 返回 None 而不是抛出异常
+        logger.warning(f"数据库连接未设置，操作将被跳过")
+        return None
     
     @classmethod
-    def get_db_connection(cls) -> BaseConnection:
-        """获取数据库连接（类方法，用于类级别的操作）"""
+    def get_db_connection(cls) -> Optional[BaseConnection]:
+        """获取数据库连接（类方法，用于类级别的操作），如果未设置则返回 None"""
         if cls._db_connection is not None:
+            # 检查连接是否可用
+            if hasattr(cls._db_connection, 'is_available') and not cls._db_connection.is_available():
+                logger.debug(f"类级别的数据库连接不可用，操作将被跳过")
+                return None
             return cls._db_connection
         if cls._default_db_connection is not None:
+            # 检查连接是否可用
+            if hasattr(cls._default_db_connection, 'is_available') and not cls._default_db_connection.is_available():
+                logger.debug(f"全局默认数据库连接不可用，操作将被跳过")
+                return None
             return cls._default_db_connection
-        raise RuntimeError(
-            f"数据库连接未设置。请使用以下方法之一：\n"
-            f"1. BaseDBModel.set_default_db_connection() - 设置全局默认连接\n"
-            f"2. {cls.__name__}.set_db_connection() - 为该类设置连接"
-        )
+        # 返回 None 而不是抛出异常
+        logger.warning(f"数据库连接未设置，操作将被跳过")
+        return None
     
     @classmethod
     def get_table_name(cls) -> str:
@@ -164,66 +179,84 @@ class BaseDBModel(BaseModel, ABC):
         支持 MySQL、PostgreSQL 和 SQLite
         """
         db = cls.get_db_connection()
+        if db is None:
+            logger.warning(f"检查表 {cls.get_table_name()} 是否存在失败：数据库连接未设置")
+            return False
+        
         table_name = cls.get_table_name()
         
         # 根据数据库类型使用不同的查询方式
         db_type = db.config.get("type", "mysql").lower()
         
-        if db_type == "sqlite":
-            # SQLite 使用 sqlite_master 表
-            sql = """
-            SELECT 1
-            FROM sqlite_master
-            WHERE type = 'table' AND name = %s
-            """
-            result = db.execute(sql, (table_name,))
-        elif db_type == "postgresql":
-            # PostgreSQL 使用 information_schema
-            sql = """
-            SELECT 1
-            FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_name = %s
-            """
-            result = db.execute(sql, (table_name,))
-        else:
-            # MySQL 使用 information_schema
-            database = db.config.get("database")
-            if database is None:
-                raise ValueError("MySQL 配置中缺少 database 参数")
-            sql = """
-            SELECT 1
-            FROM information_schema.tables
-            WHERE table_schema = %s AND table_name = %s
-            """
-            result = db.execute(sql, (database, table_name))
-        
-        return len(result) > 0
+        try:
+            if db_type == "sqlite":
+                # SQLite 使用 sqlite_master 表
+                sql = """
+                SELECT 1
+                FROM sqlite_master
+                WHERE type = 'table' AND name = %s
+                """
+                result = db.execute(sql, (table_name,))
+            elif db_type == "postgresql":
+                # PostgreSQL 使用 information_schema
+                sql = """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = %s
+                """
+                result = db.execute(sql, (table_name,))
+            else:
+                # MySQL 使用 information_schema
+                database = db.config.get("database")
+                if database is None:
+                    logger.warning(f"检查表 {table_name} 是否存在失败：MySQL 配置中缺少 database 参数")
+                    return False
+                sql = """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+                """
+                result = db.execute(sql, (database, table_name))
+            
+            return len(result) > 0
+        except Exception as e:
+            logger.error(f"检查表 {table_name} 是否存在失败：{str(e)}")
+            return False
 
     @classmethod
-    def get_create_table_sql(cls) -> str:
+    def get_create_table_sql(cls) -> Optional[str]:
         """
         获取建表 SQL
         优先级：手动声明的 SQL > 自动生成的 SQL
         """
         # 暂时只支持手动声明
         if cls.create_table_sql is None:
-            raise NotImplementedError(
-                f"类 {cls.__name__} 未定义 create_table_sql。\n"
-                f"请在类中声明：create_table_sql = \"CREATE TABLE ...\"\n"
-                f"或等待未来版本支持自动根据字段生成建表 SQL。"
-            )
+            logger.warning(f"类 {cls.__name__} 未定义 create_table_sql，无法创建表")
+            return None
         
         # 替换表名占位符（如果有）
         table_name = cls.get_table_name()
         return cls.create_table_sql.replace("{{table_name}}", table_name)
 
     @classmethod
-    def create_table(cls) -> None:
-        """创建表（使用手动声明的建表 SQL）"""
+    def create_table(cls) -> bool:
+        """创建表（使用手动声明的建表 SQL），返回是否成功"""
         db = cls.get_db_connection()
+        if db is None:
+            logger.warning(f"创建表 {cls.get_table_name()} 失败：数据库连接未设置")
+            return False
+        
         sql = cls.get_create_table_sql()
-        db.execute(sql, commit=True)
-        logger.info(f"表 {cls.get_table_name()} 创建成功")
+        if sql is None:
+            return False
+        
+        try:
+            db.execute(sql, commit=True)
+            logger.info(f"表 {cls.get_table_name()} 创建成功")
+            return True
+        except Exception as e:
+            logger.error(f"创建表 {cls.get_table_name()} 失败：{str(e)}")
+            return False
 
     @classmethod
     def _ensure_table_exists(cls) -> None:
@@ -236,9 +269,12 @@ class BaseDBModel(BaseModel, ABC):
             return
         
         # 检查表是否存在
-        if not cls.table_exists():
-            logger.info(f"表 {cls.get_table_name()} 不存在，开始创建...")
-            cls.create_table()
+        try:
+            if not cls.table_exists():
+                logger.info(f"表 {cls.get_table_name()} 不存在，开始创建...")
+                cls.create_table()
+        except Exception as e:
+            logger.warning(f"检查或创建表 {cls.get_table_name()} 失败：{str(e)}")
         
         # 标记为已检查
         cls._table_checked = True
@@ -246,30 +282,44 @@ class BaseDBModel(BaseModel, ABC):
     @classmethod
     def get_by_id(cls: Type[T], id_val: int) -> Optional[T]:
         """根据ID查询记录"""
-        cls._ensure_table_exists()
-        db = cls.get_db_connection()
-        table_name = cls.get_table_name()
-        sql = f"SELECT * FROM `{table_name}` WHERE id = %s"
-        result = db.execute(sql, (id_val,))
-        
-        if not result:
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.get_by_id({id_val}) 失败：数据库连接未设置")
+                return None
+            table_name = cls.get_table_name()
+            sql = f"SELECT * FROM `{table_name}` WHERE id = %s"
+            result = db.execute(sql, (id_val,))
+            
+            if not result:
+                return None
+            
+            return cls(**result[0])
+        except Exception as e:
+            logger.error(f"{cls.__name__}.get_by_id({id_val}) 失败：{str(e)}")
             return None
-        
-        return cls(**result[0])
     
     @classmethod
     def get_all(cls: Type[T], limit: Optional[int] = None, offset: int = 0) -> List[T]:
         """查询所有记录"""
-        cls._ensure_table_exists()
-        db = cls.get_db_connection()
-        table_name = cls.get_table_name()
-        sql = f"SELECT * FROM `{table_name}`"
-        
-        if limit is not None:
-            sql += f" LIMIT {offset}, {limit}"
-        
-        results = db.execute(sql)
-        return [cls(**row) for row in results]
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.get_all() 失败：数据库连接未设置")
+                return []
+            table_name = cls.get_table_name()
+            sql = f"SELECT * FROM `{table_name}`"
+            
+            if limit is not None:
+                sql += f" LIMIT {offset}, {limit}"
+            
+            results = db.execute(sql)
+            return [cls(**row) for row in results]
+        except Exception as e:
+            logger.error(f"{cls.__name__}.get_all() 失败：{str(e)}")
+            return []
     
     @classmethod
     def find_by(cls: Type[T], **filters) -> List[T]:
@@ -277,19 +327,26 @@ class BaseDBModel(BaseModel, ABC):
         if not filters:
             return cls.get_all()
         
-        cls._ensure_table_exists()
-        db = cls.get_db_connection()
-        table_name = cls.get_table_name()
-        
-        where_clauses = []
-        params = []
-        for key, value in filters.items():
-            where_clauses.append(f"{key} = %s")
-            params.append(value)
-        
-        sql = f"SELECT * FROM `{table_name}` WHERE {' AND '.join(where_clauses)}"
-        results = db.execute(sql, tuple(params))
-        return [cls(**row) for row in results]
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.find_by({filters}) 失败：数据库连接未设置")
+                return []
+            table_name = cls.get_table_name()
+            
+            where_clauses = []
+            params = []
+            for key, value in filters.items():
+                where_clauses.append(f"{key} = %s")
+                params.append(value)
+            
+            sql = f"SELECT * FROM `{table_name}` WHERE {' AND '.join(where_clauses)}"
+            results = db.execute(sql, tuple(params))
+            return [cls(**row) for row in results]
+        except Exception as e:
+            logger.error(f"{cls.__name__}.find_by({filters}) 失败：{str(e)}")
+            return []
     
     @classmethod
     def find_one_by(cls: Type[T], **filters) -> Optional[T]:
@@ -299,34 +356,51 @@ class BaseDBModel(BaseModel, ABC):
     
     def save(self) -> int:
         """保存记录（插入或更新），返回ID"""
-        self.__class__._ensure_table_exists()
-        if self.id is None:
-            return self._insert()
-        else:
-            self._update()
-            return self.id
+        try:
+            self.__class__._ensure_table_exists()
+            if self.id is None:
+                return self._insert()
+            else:
+                self._update()
+                return self.id
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}.save() 失败：{str(e)}")
+            return -1
     
     def _insert(self) -> int:
         """插入记录，返回新插入的ID"""
         db = self.get_db_connection()
+        if db is None:
+            logger.warning(f"{self.__class__.__name__}._insert() 失败：数据库连接未设置")
+            return -1
+        
         table_name = self.get_table_name()
         
         # 获取所有字段（排除 None 值和内部字段）
         data = self.model_dump(exclude_none=True, exclude={'id'})
         
         if not data:
-            raise ValueError("没有可插入的数据")
+            logger.warning(f"{self.__class__.__name__}._insert() 失败：没有可插入的数据")
+            return -1
         
-        keys = list(data.keys())
-        placeholders = ",".join(["%s"] * len(keys))
-        sql = f"INSERT INTO `{table_name}` ({','.join(keys)}) VALUES ({placeholders})"
-        
-        self.id = db.execute(sql, tuple(data[k] for k in keys))
-        return self.id
+        try:
+            keys = list(data.keys())
+            placeholders = ",".join(["%s"] * len(keys))
+            sql = f"INSERT INTO `{table_name}` ({','.join(keys)}) VALUES ({placeholders})"
+            
+            self.id = db.execute(sql, tuple(data[k] for k in keys))
+            return self.id
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}._insert() 失败：{str(e)}")
+            return -1
     
     def _update(self) -> bool:
         """更新记录，返回是否成功"""
         db = self.get_db_connection()
+        if db is None:
+            logger.warning(f"{self.__class__.__name__}._update() 失败：数据库连接未设置")
+            return False
+        
         table_name = self.get_table_name()
         
         # 获取所有字段（排除 None 值和内部字段）
@@ -335,42 +409,65 @@ class BaseDBModel(BaseModel, ABC):
         if not data:
             return True
         
-        sets = ",".join([f"{k}=%s" for k in data])
-        sql = f"UPDATE `{table_name}` SET {sets} WHERE id = %s"
-        
-        affected = db.execute(sql, tuple(data.values()) + (self.id,))
-        return affected > 0
+        try:
+            sets = ",".join([f"{k}=%s" for k in data])
+            sql = f"UPDATE `{table_name}` SET {sets} WHERE id = %s"
+            
+            affected = db.execute(sql, tuple(data.values()) + (self.id,))
+            return affected > 0
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}._update() 失败：{str(e)}")
+            return False
     
     def update(self, **fields) -> bool:
         """更新指定字段"""
-        for key, value in fields.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-        return self._update()
+        try:
+            for key, value in fields.items():
+                if hasattr(self, key):
+                    setattr(self, key, value)
+            return self._update()
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}.update({fields}) 失败：{str(e)}")
+            return False
     
     def delete(self) -> bool:
         """删除记录，返回是否成功"""
         if self.id is None:
-            raise ValueError("无法删除未保存的记录")
+            logger.warning(f"{self.__class__.__name__}.delete() 失败：无法删除未保存的记录")
+            return False
         
-        self.__class__._ensure_table_exists()
-        db = self.get_db_connection()
-        table_name = self.get_table_name()
-        sql = f"DELETE FROM `{table_name}` WHERE id = %s"
-        
-        affected = db.execute(sql, (self.id,))
-        return affected > 0
+        try:
+            self.__class__._ensure_table_exists()
+            db = self.get_db_connection()
+            if db is None:
+                logger.warning(f"{self.__class__.__name__}.delete() 失败：数据库连接未设置")
+                return False
+            table_name = self.get_table_name()
+            sql = f"DELETE FROM `{table_name}` WHERE id = %s"
+            
+            affected = db.execute(sql, (self.id,))
+            return affected > 0
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}.delete() 失败：{str(e)}")
+            return False
     
     @classmethod
     def delete_by_id(cls, id_val: int) -> bool:
         """根据ID删除记录"""
-        cls._ensure_table_exists()
-        db = cls.get_db_connection()
-        table_name = cls.get_table_name()
-        sql = f"DELETE FROM `{table_name}` WHERE id = %s"
-        
-        affected = db.execute(sql, (id_val,))
-        return affected > 0
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.delete_by_id({id_val}) 失败：数据库连接未设置")
+                return False
+            table_name = cls.get_table_name()
+            sql = f"DELETE FROM `{table_name}` WHERE id = %s"
+            
+            affected = db.execute(sql, (id_val,))
+            return affected > 0
+        except Exception as e:
+            logger.error(f"{cls.__name__}.delete_by_id({id_val}) 失败：{str(e)}")
+            return False
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -379,9 +476,16 @@ class BaseDBModel(BaseModel, ABC):
     @classmethod
     def count(cls) -> int:
         """查询记录总数"""
-        cls._ensure_table_exists()
-        db = cls.get_db_connection()
-        table_name = cls.get_table_name()
-        sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
-        result = db.execute(sql)
-        return result[0]['count'] if result else 0
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.count() 失败：数据库连接未设置")
+                return 0
+            table_name = cls.get_table_name()
+            sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
+            result = db.execute(sql)
+            return result[0]['count'] if result else 0
+        except Exception as e:
+            logger.error(f"{cls.__name__}.count() 失败：{str(e)}")
+            return 0
