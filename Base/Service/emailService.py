@@ -21,7 +21,10 @@ def send_email(
         max_retries: int = 2  # 最大重试次数
 ):
     """
-        使用SMTP发送邮件的封装函数。
+        持久化赋能的 邮件发送 封装函数。
+        - 使用后会持久化到数据库中
+        - 非侵入式,数据库连接不正常不影响正常运行逻辑，只会日志警告 数据库连接 存在问题
+        - 如需绕过数据库持久化,请使用 原emailClient.send_email 函数
 
         Args:
             sender_email (str): 发件人邮箱地址。
