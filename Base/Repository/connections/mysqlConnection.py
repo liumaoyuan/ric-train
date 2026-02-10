@@ -154,4 +154,41 @@ class MySQLConnection(BaseConnection):
         )
         return len(result) > 0
 
+    # ======================
+    # 抽象方法实现
+    # ======================
+
+    def get_connection_url(self) -> str:
+        """
+        获取 MySQL 连接URL（遵循 SQLAlchemy 数据库URL格式）
+        
+        Returns:
+            MySQL 连接URL字符串
+            格式: "mysql+pymysql://user:password@host:port/database?charset=utf8mb4"
+        
+        Examples:
+            >>> conn = MySQLConnection(...)
+            >>> conn.get_connection_url()
+            'mysql+pymysql://root:123456@localhost:3306/mydb?charset=utf8mb4'
+        """
+        from urllib.parse import quote_plus
+        
+        # 获取连接参数
+        user = self.config["user"]
+        password = self.config["password"]
+        host = self.config["host"]
+        port = self.config["port"]
+        database = self.config["database"]
+        charset = self.config["charset"]
+        
+        # URL编码密码（处理特殊字符）
+        encoded_password = quote_plus(password)
+        
+        # 构建连接URL
+        # 格式: mysql+pymysql://user:password@host:port/database?charset=utf8mb4
+        url = f"mysql+pymysql://{user}:{encoded_password}@{host}:{port}/{database}?charset={charset}"
+        
+        logger.debug(f"MySQL 连接URL: {user}:***@{host}:{port}/{database}")
+        return url
+
 

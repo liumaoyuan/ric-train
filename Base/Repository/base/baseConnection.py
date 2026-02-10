@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, Union
 from contextlib import contextmanager
 import logging
+from urllib.parse import quote_plus
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,19 @@ class BaseConnection(ABC):
     @abstractmethod
     def _get_raw_connection(self):
         """获取原生数据库连接（不使用连接池时）"""
+        pass
+
+    @abstractmethod
+    def get_connection_url(self) -> str:
+        """
+        获取数据库连接URL（遵循 SQLAlchemy 数据库URL格式）
+        
+        Returns:
+            数据库连接URL字符串
+            例如: "mysql+pymysql://root:123456@localhost:3306/mydb?charset=utf8mb4"
+                  "postgresql+psycopg2://user:password@localhost:5432/mydb"
+                  "sqlite:///path/to/database.db"
+        """
         pass
 
     # ======================
