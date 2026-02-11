@@ -83,7 +83,7 @@ class BaseEnvSettings(BaseSettings):
             return cls(_env_file=env_file)
         return cls()
 
-    @field_validator("*", mode="before")
+    # @field_validator("*", mode="before")
     @classmethod
     def parse_env_vars(cls, v: Any, info) -> Any:
         """
@@ -117,7 +117,7 @@ class MySQLSettings(BaseEnvSettings):
     host: Optional[str] = None
     port: Optional[int] = 3306
     user: Optional[str] = None
-    password: Optional[str] = None
+    password: Optional[str|int] = None
     name: Optional[str] = None
     charset: str = "utf8mb4"
 
