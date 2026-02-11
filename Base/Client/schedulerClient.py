@@ -1,14 +1,10 @@
-import functools
-from typing import Callable, Optional, List, Dict, Any
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.executors.pool import ThreadPoolExecutor
-from apscheduler.job import Job
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.triggers.date import DateTrigger
 from datetime import datetime
-import logging
+from typing import Callable, Optional, List, Dict, Any
+
+from apscheduler.executors.pool import ThreadPoolExecutor
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 
 class TaskSchedulerClient:
