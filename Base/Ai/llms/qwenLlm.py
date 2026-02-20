@@ -336,6 +336,15 @@ def create_qwen_llm(
 
     return QwenLlm(config=config)
 
+default_qwen_llm = create_qwen_llm()
+
+def get_default_qwen_llm() -> QwenLlm:
+    """
+    便捷函数：获取默认的 Qwen LLM 实例
+    建议使用这个函数获取默认的 Qwen LLM 实例， 大量的滥构造实例感觉可能存在资源回收方面的问题，虽然花销不大，还是尽量避免
+    一些配置参数可以调用时传入
+    """
+    return default_qwen_llm
 
 if __name__ == '__main__':
 
