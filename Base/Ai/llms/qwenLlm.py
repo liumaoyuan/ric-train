@@ -1,12 +1,13 @@
-from typing import Any, Dict, Optional, Generator, List
 import logging
+from typing import Any, Dict, Optional, Generator, List
 
-from Base.Ai.base import SystemMessages, UserMessages
 from Base.Ai.base.baseEnum import LLMTypeEnum
 from Base.Ai.base.baseLlm import BaseLlm
 from Base.Ai.base.baseSetting import DashScopeConfig
 from Base.Config.setting import settings
 from Base.RicUtils.audioFileUtils import AudioFileHandler
+from Base.RicUtils.decoratorUtils import timing_log
+from Base.RicUtils.redisUtils import cache_with_params
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +25,11 @@ class QwenLlm(BaseLlm):
     def supports_ocr(self) -> bool:
         return True
 
+    @timing_log
+    @cache_with_params("QWEN_OCR:{img_file_path}", expire=3600)
     def _ocr(self, img_file_path: str, prompt: str = None, **kwargs: Any):
         data_uri = AudioFileHandler.audio_file_to_data_uri(img_file_path)
+        ocr_model_name = kwargs.get('ocr_model_name') or settings.dashscope.ocr_model_name
         messages = [
             {
                 "role": "user",
@@ -46,18 +50,28 @@ class QwenLlm(BaseLlm):
             }
         ]
         response = self.model_client.chat.completions.create(
-            model= kwargs.get('ocr_model_name') or settings.dashscope.ocr_model_name,
+            model=kwargs.get('ocr_model_name') or settings.dashscope.ocr_model_name,
             messages=messages,
         )
+        logger.debug(f"OCR 实际运行 model_name: {ocr_model_name}")
         return response.choices[0].message.content
 
     @property
     def supports_asr(self) -> bool:
         return True
 
+    @timing_log
+    @cache_with_params("QWEN_ASR:{audio_file_path}", expire=3600)
     def _asr(self, audio_file_path: str, **kwargs: Any):
+        """
+        ASR 识别音频文件
+        :param audio_file_path:
+        :param kwargs:  支持传入 asr_model_name 修改默认的ASR模型，具体支持情况详见 千问官网
+        :return:
+        """
         # 将音频文件转换为 Data URI 格式
         data_uri = AudioFileHandler.audio_file_to_data_uri(audio_file_path)
+        asr_model_name = kwargs.get('asr_model_name') or settings.dashscope.asr_model_name
         messages = [
             {
                 "content": [
@@ -72,7 +86,7 @@ class QwenLlm(BaseLlm):
             }
         ]
         response = self.model_client.chat.completions.create(
-            model=kwargs.get('asr_model_name') or settings.dashscope.asr_model_name,
+            model=asr_model_name,
             messages=messages,
             extra_body={
                 "asr_options": {
@@ -83,6 +97,7 @@ class QwenLlm(BaseLlm):
             stream=False
             # **kwargs
         )
+        logger.debug(f"ASR 实际运行 model_name: {asr_model_name}")
         if response:
             return response.choices[0].message.content
         return response
@@ -91,14 +106,18 @@ class QwenLlm(BaseLlm):
     def supports_embedding(self) -> bool:
         return True
 
+    @timing_log
+    @cache_with_params("QWEN_EMBEDDING:{text}:{dimensions}", expire=3600)
     def _embedding(self, text: str, dimensions: int = 1024, **kwargs: Any) -> List[float]:
+        embedding_model_name = kwargs.get('embedding_model_name') or settings.dashscope.embedding_model_name
         vec_res = self.model_client.embeddings.create(
-            model=kwargs.get('embedding_model_name') or settings.dashscope.embedding_model_name,
+            model=embedding_model_name,
             input=text,
             dimensions=dimensions,
             encoding_format="float",
             # **kwargs
         )
+        logger.debug(f"embedding 实际运行 model_name: {embedding_model_name}")
         return [i.embedding for i in vec_res.data]
 
     # Qwen 模型的上下文窗口大小（token 数）
@@ -321,7 +340,7 @@ def create_qwen_llm(
 if __name__ == '__main__':
 
     # 示例：使用便捷函数创建
-    llm = QwenLlm()
+    llm = QwenLlm(model="qwen3-max")
 
     print("=== 模型信息 ===")
     info = llm.get_model_info()
@@ -331,8 +350,16 @@ if __name__ == '__main__':
     _file_path = r'C:\Users\11243\Desktop\test.m4a'
     _img_file_path = r'C:\Users\11243\Desktop\test.png'
 
-    res = llm.asr(_file_path)
-    print(res)
+    # res = llm.asr(_file_path)
+    # print(res)
+
+    # res = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
+    # res1 = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
+    # res2 = llm.embedding(text="你是一个有帮助的助手", dimensions=768)
+
+
+    res = llm.ocr(img_file_path=_img_file_path)
+    res2 = llm.ocr(img_file_path=_img_file_path)
 
     # 测试思考模式
     # print("\n=== 测试思考模式 ===")

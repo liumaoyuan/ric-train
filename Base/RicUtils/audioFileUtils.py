@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import uuid
 import base64
+from functools import lru_cache
 
 from Base.Config.setting import settings
 from Base.RicUtils.decoratorUtils import  after_exec_4c, params_handle_4c
@@ -122,6 +123,7 @@ class AudioFileHandler:
             return None
 
     @staticmethod
+    @lru_cache(maxsize=128)
     def audio_file_to_data_uri(audio_file_path: str) -> str:
         """
         将音频文件转换为 Data URI 格式

@@ -143,9 +143,6 @@ class BaseLlm(ABC):
         """
         try:
             params = self._prepare_params(**kwargs, stream=stream)
-            del params['embedding_model_name']
-            del params['asr_model_name']
-            del params['ocr_model_name']
             response = self.model_client.chat.completions.create(
                 messages=messages,
                 **params
@@ -446,4 +443,13 @@ class BaseLlm(ABC):
 
         params.setdefault("model", self.model_name)
         logger.info(f"调用参数: {params}")
+        return params
+
+
+    def _prepare_params_for_chat(self, **kwargs: Any) -> Dict[str, Any]:
+        """
+        准备调用参数（common 私有部分）
+        """
+        params = self._prepare_params(**kwargs)
+
         return params

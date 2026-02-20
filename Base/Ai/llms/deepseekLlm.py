@@ -79,7 +79,7 @@ class DeepSeekLlm(BaseLlm):
         self.model = model or settings.deepseek.default_model
         self._api_key = api_key
         self._base_url = base_url
-        self.init_openai_client(api_key=api_key, base_url=base_url, logger_name=__name__)
+        self.init_openai_client(api_key=api_key, base_url=base_url)
 
     def init_model(self):
         """初始化模型（已通过 init_openai_client 实现）"""

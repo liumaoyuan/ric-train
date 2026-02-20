@@ -2,7 +2,8 @@ import logging
 import os
 import warnings
 from typing import List, Optional, Tuple, Generator, Dict
-from Base.RicUtils.pathUtils import find_project_root, to_absolute_path
+
+from Base.RicUtils.pathUtils import to_absolute_path
 
 # 过滤掉 jieba 库的 pkg_resources 废弃警告
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=UserWarning)

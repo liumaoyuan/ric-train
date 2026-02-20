@@ -34,6 +34,7 @@ def singleton(cls):
 def timing_log(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     装饰器：在函数执行前后打印开始时间、结束时间和运行耗时。
+    需要开启 DEBUG 日志级别
     """
 
     @wraps(func)
