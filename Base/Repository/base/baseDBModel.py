@@ -338,7 +338,7 @@ class BaseDBModel(BaseModel, ABC):
             where_clauses = []
             params = []
             for key, value in filters.items():
-                where_clauses.append(f"{key} = %s")
+                where_clauses.append(f"`{key}` = %s")
                 params.append(value)
             
             sql = f"SELECT * FROM `{table_name}` WHERE {' AND '.join(where_clauses)}"
@@ -386,7 +386,9 @@ class BaseDBModel(BaseModel, ABC):
         try:
             keys = list(data.keys())
             placeholders = ",".join(["%s"] * len(keys))
-            sql = f"INSERT INTO `{table_name}` ({','.join(keys)}) VALUES ({placeholders})"
+            # 为列名添加反引号，避免 MySQL 保留关键字冲突
+            quoted_keys = [f"`{k}`" for k in keys]
+            sql = f"INSERT INTO `{table_name}` ({','.join(quoted_keys)}) VALUES ({placeholders})"
             
             self.id = db.execute(sql, tuple(data[k] for k in keys))
             return self.id
@@ -410,7 +412,8 @@ class BaseDBModel(BaseModel, ABC):
             return True
         
         try:
-            sets = ",".join([f"{k}=%s" for k in data])
+            # 为列名添加反引号，避免 MySQL 保留关键字冲突
+            sets = ",".join([f"`{k}`=%s" for k in data])
             sql = f"UPDATE `{table_name}` SET {sets} WHERE id = %s"
             
             affected = db.execute(sql, tuple(data.values()) + (self.id,))
