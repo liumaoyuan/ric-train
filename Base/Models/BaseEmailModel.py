@@ -1,8 +1,9 @@
-from Base.Repository.models.moduleDbModel import BaseModuleDBModel
-from typing import Optional, ClassVar
-from pydantic import Field
 from datetime import datetime
-import json
+from typing import Optional, ClassVar
+
+from pydantic import Field
+
+from Base.Repository.models.moduleDbModel import BaseModuleDBModel
 
 
 class BaseEmailModels(BaseModuleDBModel):
@@ -56,13 +57,8 @@ class BaseEmailModels(BaseModuleDBModel):
     sent_at: Optional[datetime] = Field(None, description="发送时间")
 
 
-
-
-
 if __name__ == '__main__':
-
     # 测试1：字段必填校验
-
 
     # 测试2：创建完整邮件记录
     print("\n=== 测试2：创建邮件记录 ===")
@@ -70,12 +66,8 @@ if __name__ == '__main__':
 
     )
     res = _email.find_by()
-    print(f"✓ 邮件记录创建成功"+ str(res))
+    print(f"✓ 邮件记录创建成功" + str(res))
     print(f"  发件人: {_email.sender_email}")
     print(f"  收件人: {_email.receiver_emails}")
     print(f"  主题: {_email.subject}")
     print(f"  状态: {_email.status}")
-
-
-
-

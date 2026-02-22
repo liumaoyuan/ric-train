@@ -181,6 +181,7 @@ class BaseConnection(ABC):
                 return 0
 
         try:
+            logger.debug(f"准备执行 SQL: {sql}")
             with conn.cursor() as cur:
                 cur.execute(sql, params or ())
 
