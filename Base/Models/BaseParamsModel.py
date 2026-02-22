@@ -1,9 +1,11 @@
 from datetime import datetime
 from typing import Optional, ClassVar, List
+from functools import lru_cache
 
 from pydantic import Field
 
 from Base.Repository.models.moduleDbModel import BaseModuleDBModel
+from Base.RicUtils.decoratorUtils import timing_log
 
 
 class BaseParamsModel(BaseModuleDBModel):
@@ -74,6 +76,22 @@ class BaseParamsModel(BaseModuleDBModel):
         Returns:
             包含 code、value、desc 的字典，未找到返回 None
         """
+        return cls._cached_get_param_by_code(cls, code, type)
+
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def _cached_get_param_by_code(cls, code: str, type: Optional[str] = None) -> Optional[dict]:
+        """
+        带缓存的参数查询方法（内部使用）
+
+        Args:
+            cls: 类对象
+            code: 参数编码
+            type: 参数类型（可选）
+
+        Returns:
+            包含 code、value、desc 的字典，未找到返回 None
+        """
         try:
             cls._ensure_table_exists()
             db = cls.get_db_connection()
@@ -98,11 +116,28 @@ class BaseParamsModel(BaseModuleDBModel):
             return None
 
     @classmethod
+    @timing_log
     def get_params_by_parent_code(cls, parent_code: str, type: Optional[str] = None) -> List[dict]:
         """
         根据父级参数编码获取参数列表（只返回启用的），按 sort_order 排序
 
         Args:
+            parent_code: 父级参数编码
+            type: 参数类型（可选）
+
+        Returns:
+            包含 code、value、desc 的字典列表
+        """
+        return cls._cached_get_params_by_parent_code(cls, parent_code, type)
+
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def _cached_get_params_by_parent_code(cls, parent_code: str, type: Optional[str] = None) -> List[dict]:
+        """
+        带缓存的父级参数查询方法（内部使用）
+
+        Args:
+            cls: 类对象
             parent_code: 父级参数编码
             type: 参数类型（可选）
 
@@ -131,6 +166,17 @@ class BaseParamsModel(BaseModuleDBModel):
             logger = __import__('logging').getLogger(__name__)
             logger.error(f"get_params_by_parent_code({parent_code}) 失败：{str(e)}")
             return []
+
+    @classmethod
+    def clear_param_cache(cls):
+        """
+        清除参数查询缓存
+
+        调用此方法后，下次查询会重新从数据库获取数据
+        """
+        cls._cached_get_param_by_code.cache_clear()
+        cls._cached_get_params_by_parent_code.cache_clear()
+        print("✓ 参数查询缓存已清除")
 
 
 if __name__ == '__main__':
@@ -168,6 +214,9 @@ if __name__ == '__main__':
     # 测试 get_params_by_parent_code
     print("\n2. 测试 get_params_by_parent_code:")
     params_list = BaseParamsModel.get_params_by_parent_code('edu_subject', 'Education')
+    params_list1 = BaseParamsModel.get_params_by_parent_code('edu_subject', 'Education')
+    BaseParamsModel.clear_param_cache()
+    params_list2 = BaseParamsModel.get_params_by_parent_code('edu_subject', 'Education')
     print(f"   查询 edu_subject 的所有子参数:")
     for p in params_list:
         print(f"   - {p}")
