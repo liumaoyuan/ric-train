@@ -362,13 +362,13 @@ if __name__ == '__main__':
     # res = llm.asr(_file_path)
     # print(res)
 
-    # res = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
-    # res1 = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
-    # res2 = llm.embedding(text="你是一个有帮助的助手", dimensions=768)
+    res = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
+    res1 = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
+    res2 = llm.embedding(text="你是一个有帮助的助手", dimensions=768)
 
 
-    res = llm.ocr(img_file_path=_img_file_path)
-    res2 = llm.ocr(img_file_path=_img_file_path)
+    # res = llm.ocr(img_file_path=_img_file_path)
+    # res2 = llm.ocr(img_file_path=_img_file_path)
 
     # 测试思考模式
     # print("\n=== 测试思考模式 ===")
