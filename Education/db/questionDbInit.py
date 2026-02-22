@@ -2,6 +2,13 @@
 
 from Base.Models.BaseParamsModel import BaseParamsModel
 from Education.Models.pojo.questionPo import QuestionPo
+from Education.Prompts.questionPrompts import (
+    single_choice_rule,
+    multiple_choice_rule,
+    judgement_rule,
+    fill_blank_rule,
+    essay_and_short_answer_rule
+)
 
 
 def _init_params_with_parent(
@@ -107,10 +114,85 @@ def init_question_types():
         item_desc_prefix='教育项目-题目类型-'
     )
 
+
+def init_question_difficulty_labels():
+    """初始化教育项目的难度标签参数"""
+    _init_params_with_parent(
+        parent_code='edu_difficulty_label',
+        parent_value='difficulty_label',
+        parent_desc='教育项目-难度标签',
+        items='easy|medium|hard',
+        item_names={
+            'easy': '简单',
+            'medium': '中等',
+            'hard': '困难'
+        },
+        item_prefix='difficulty_label_',
+        item_desc_prefix='教育项目-难度标签-'
+    )
+
+
+def init_question_rules():
+    """初始化教育项目的出题规则参数"""
+    parent_code = 'edu_question_rule'
+    parent_value = 'question_rule'
+    parent_desc = '教育项目-出题规则'
+
+    # 检查父级参数是否存在
+    parent_param = BaseParamsModel.get_param_by_code(parent_code, 'Education')
+
+    if parent_param is None:
+        # 父级参数不存在，创建父级参数
+        parent = BaseParamsModel(
+            code=parent_code,
+            value=parent_value,
+            desc=parent_desc,
+            type='Education',
+        )
+        parent.save()
+        print(f"✓ 创建父级参数成功: {parent_code}")
+    else:
+        print(f"✓ 父级参数已存在: {parent_code}")
+
+    # 从 questionPrompts 导入的规则常量
+    rules = {
+        'single_choice': single_choice_rule,
+        'multiple_choice': multiple_choice_rule,
+        'judgement': judgement_rule,
+        'fill_blank': fill_blank_rule,
+        'essay': essay_and_short_answer_rule,
+        'short_answer': essay_and_short_answer_rule
+    }
+
+    # 检查子参数是否已存在
+    existing_items = BaseParamsModel.get_params_by_parent_code(parent_code, 'Education')
+    existing_codes = {s['code'] for s in existing_items}
+
+    # 遍历所有规则并插入不存在的参数
+    for code, value in rules.items():
+        if code in existing_codes:
+            print(f"  跳过已存在: {code}")
+            continue
+
+        params = BaseParamsModel(
+            code=code,
+            value=value,
+            desc=f'教育项目-出题规则-{code}',
+            parent_code=parent_code,
+            type='Education',
+        )
+        params.save()
+        print(f"✓ 插入成功: {code}")
+
+    print(f"\n出题规则初始化完成！")
+
+
 def question_db_init():
     QuestionPo.create_table()
     init_question_subjects()
     init_question_types()
+    init_question_difficulty_labels()
+    init_question_rules()
 
 if __name__ == '__main__':
     question_db_init()
