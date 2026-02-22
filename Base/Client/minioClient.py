@@ -32,10 +32,10 @@ class MinioClient(metaclass=SingletonMeta):
                 secure=secure
             )
             self.is_active = True
-            print(f"[*] Minio 客户端连接成功: {self.endpoint}")
+            logger.info(f"[*] Minio 客户端连接成功: {self.endpoint}")
         except Exception as e:
             self.is_active = False
-            print(f"[!] Minio 连接失败: {e}")
+            logger.error(f"[!] Minio 连接失败: {e}")
 
     # ==========================
     # Bucket (存储桶) 操作
