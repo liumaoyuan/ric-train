@@ -75,19 +75,41 @@ def remove_none(iterable):
     """
     移除可迭代对象中的所有 None 值，并返回同类型的结果。
 
-    支持: list, set, tuple 等常见类型。
+    支持: list, set, tuple, dict 等常见类型。
     对于不支持的类型，默认返回 list。
-    """
-    # 过滤掉 None
-    filtered = [x for x in iterable if x is not None]
 
+    Args:
+        iterable: 可迭代对象，可以是 list, set, tuple, dict 等
+
+    Returns:
+        去除 None 值后的同类型对象
+
+    Example:
+        # 列表
+        remove_none([1, None, 3, None, 5])  # [1, 3, 5]
+
+        # 字典
+        remove_none({'a': 1, 'b': None, 'c': 3})  # {'a': 1, 'c': 3}
+
+        # 元组
+        remove_none((1, None, 3))  # (1, 3)
+
+        # 集合
+        remove_none({1, None, 3})  # {1, 3}
+    """
     # 根据输入类型返回对应类型
-    if isinstance(iterable, list):
-        return filtered
+    if isinstance(iterable, dict):
+        # 对于字典，过滤掉值为 None 的 key-value 对
+        return {k: v for k, v in iterable.items() if v is not None}
+    elif isinstance(iterable, list):
+        # 对于列表，过滤掉 None 值
+        return [x for x in iterable if x is not None]
     elif isinstance(iterable, set):
-        return set(filtered)
+        # 对于集合，过滤掉 None 值
+        return {x for x in iterable if x is not None}
     elif isinstance(iterable, tuple):
-        return tuple(filtered)
+        # 对于元组，过滤掉 None 值
+        return tuple(x for x in iterable if x is not None)
     else:
         # 其他类型（如 generator）默认返回 list
-        return filtered
+        return [x for x in iterable if x is not None]
