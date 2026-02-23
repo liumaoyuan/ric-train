@@ -21,6 +21,7 @@ class QuestionService(BaseModel):
     subjects: List[str] = Field([], description="科目列表")
     question_types: List[str] = Field([], description="题型列表")
     difficulty_levels: List[str] = Field([], description="难度等级列表")
+    knowledge_points: dict = Field({}, description="知识点字典")
 
     def generate_question_by_prompt(self):
         # TODO : 根据用户自然语言输入的提示生成题目 ， 如“帮我生成一道困难的高三几何相关的数学题”
@@ -42,6 +43,70 @@ class QuestionService(BaseModel):
             self.difficulty_levels = BaseParamsModel.get_params_by_parent_code('edu_difficulty_label',
                                                                                'Education') or []
         return self.difficulty_levels
+
+    def get_knowledge_points(self, grade: str, subject: str):
+        """
+        根据年级和学科获取知识点列表
+
+        Args:
+            grade: 年级（小学|初中|高中|大学）
+            subject: 学科（chinese|math|english|physics|chemistry|biology|history|geography|politics）
+
+        Returns:
+            知识点字符串（逗号分隔的知识点列表）
+        """
+        # 生成 code: grade_subject (例如: 小学_chinese)
+        code = f'{grade}_{subject}'
+
+        # 检查缓存
+        if not self.knowledge_points.get(code):
+            # 从数据库查询知识点
+            try:
+                knowledge_point = BaseParamsModel.get_param_by_code(code=code, type='Education', parent_code='edu_knowledge_point')
+                if knowledge_point:
+                    self.knowledge_points[code] = knowledge_point.get('value', '')
+                    logger.info(f"成功获取知识点: {code}, 值: {self.knowledge_points[code][:50]}...")
+                else:
+                    self.knowledge_points[code] = ''
+                    logger.warning(f"未找到知识点: code={code}, type=Education, parent_code=edu_knowledge_point")
+            except Exception as e:
+                logger.error(f"查询知识点失败: code={code}, 错误: {str(e)}")
+                self.knowledge_points[code] = ''
+
+        return self.knowledge_points.get(code, '')
+
+    @staticmethod
+    def sample_knowledge_points(knowledge_points_str: str, count: int = 5) -> List[str]:
+        """
+        从逗号分隔的知识点字符串中随机抽取指定数量的知识点
+
+        Args:
+            knowledge_points_str: 知识点字符串（逗号分隔）
+            count: 抽取数量，默认为5
+
+        Returns:
+            知识点列表（随机抽取的列表）
+
+        示例:
+            >>> points = "名词单复数,冠词用法,人称代词,物主代词,动词时态"
+            >>> QuestionService.sample_knowledge_points(points, 3)
+            ["人称代词", "动词时态", "冠词用法"]
+        """
+        if not knowledge_points_str:
+            return []
+
+        # 分割知识点字符串，去除空格
+        points_list = [point.strip() for point in knowledge_points_str.split(',') if point.strip()]
+
+        if not points_list:
+            return []
+
+        # 如果知识点数量不足，全部返回
+        if len(points_list) <= count:
+            return points_list
+
+        # 随机抽取指定数量的知识点
+        return random.sample(points_list, count)
 
     @staticmethod
     def get_question_rule(question_type: str):
@@ -69,7 +134,7 @@ class QuestionService(BaseModel):
         self.subjects = []
         self.question_types = []
         self.difficulty_levels = []
-
+        self.knowledge_points = {}
 
     def random_generate_question(self, question_random_bo: QuestionRandomBo):
         """
@@ -80,12 +145,14 @@ class QuestionService(BaseModel):
         difficulty_level = (question_random_bo.difficulty_level or
                             random.choice(self.get_difficulty_levels()).get('value'))
         grade_type = question_random_bo.grade_type or random.choice(['小学', '初中', '高中'])
+        knowledge_points = self.sample_knowledge_points(self.get_knowledge_points(grade_type, subject))
 
-        user_prompt = f"""帮我出一道题目：
+        user_prompt = f"""帮我出一道题目，根据提供的知识点任选一个或多个进行出题：
         科目：{subject}
         题型：{question_type}
         难度：{difficulty_level}
-        年级：{grade_type}"""
+        年级：{grade_type}
+        知识点：{knowledge_points} """
 
         messages = get_generate_question_prompt(user_prompt, system_prompt_append=self.get_question_rule(question_type))
 
@@ -115,7 +182,7 @@ class QuestionService(BaseModel):
         response = json.loads(response)
 
         answer = AnswerPo(user_id=params.user_id, question_id=params.question_id, user_answer=params.answer,
-                          ai_model=llm.model_name, ai_prompt=str(messages),source=params.source, **response)
+                          ai_model=llm.model_name, ai_prompt=str(messages), source=params.source, **response)
         answer.save()
         return response
 
@@ -129,5 +196,7 @@ def get_question_service():
 
 if __name__ == '__main__':
     question_service = QuestionService()
-    res = question_service.ai_judge_question(AiJudgeQuestionBo(question_id=1, user_id='test', answer="B",source='test'))
+    res = question_service.random_generate_question(QuestionRandomBo())
+    # res = question_service.ai_judge_question(
+    #     AiJudgeQuestionBo(question_id=1, user_id='test', answer="B", source='test'))
     print(res)
