@@ -171,6 +171,18 @@ class BaseDBModel(BaseModel, ABC):
         s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', class_name)
         table_name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
         return table_name
+
+    @classmethod
+    def get_table_name_with_db(cls) -> str:
+        """获取带数据库名的表名，格式：`database`.`table`"""
+        db = cls.get_db_connection()
+        if db and db.config.get("database"):
+            database = db.config["database"]
+            table_name = cls.get_table_name()
+            return f"`{database}`.`{table_name}`"
+        else:
+            # 如果没有配置数据库名，则只返回表名
+            return f"`{cls.get_table_name()}`"
     
     @classmethod
     def table_exists(cls) -> bool:
@@ -288,13 +300,13 @@ class BaseDBModel(BaseModel, ABC):
             if db is None:
                 logger.warning(f"{cls.__name__}.get_by_id({id_val}) 失败：数据库连接未设置")
                 return None
-            table_name = cls.get_table_name()
-            sql = f"SELECT * FROM `{table_name}` WHERE id = %s"
+            table_name = cls.get_table_name_with_db()
+            sql = f"SELECT * FROM {table_name} WHERE id = %s"
             result = db.execute(sql, (id_val,))
-            
+
             if not result:
                 return None
-            
+
             return cls(**result[0])
         except Exception as e:
             logger.error(f"{cls.__name__}.get_by_id({id_val}) 失败：{str(e)}")
@@ -309,12 +321,12 @@ class BaseDBModel(BaseModel, ABC):
             if db is None:
                 logger.warning(f"{cls.__name__}.get_all() 失败：数据库连接未设置")
                 return []
-            table_name = cls.get_table_name()
-            sql = f"SELECT * FROM `{table_name}`"
-            
+            table_name = cls.get_table_name_with_db()
+            sql = f"SELECT * FROM {table_name}"
+
             if limit is not None:
                 sql += f" LIMIT {offset}, {limit}"
-            
+
             results = db.execute(sql)
             return [cls(**row) for row in results]
         except Exception as e:
@@ -326,22 +338,22 @@ class BaseDBModel(BaseModel, ABC):
         """根据条件查询记录"""
         if not filters:
             return cls.get_all()
-        
+
         try:
             cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 logger.warning(f"{cls.__name__}.find_by({filters}) 失败：数据库连接未设置")
                 return []
-            table_name = cls.get_table_name()
-            
+            table_name = cls.get_table_name_with_db()
+
             where_clauses = []
             params = []
             for key, value in filters.items():
                 where_clauses.append(f"`{key}` = %s")
                 params.append(value)
-            
-            sql = f"SELECT * FROM `{table_name}` WHERE {' AND '.join(where_clauses)}"
+
+            sql = f"SELECT * FROM {table_name} WHERE {' AND '.join(where_clauses)}"
             results = db.execute(sql, tuple(params))
             return [cls(**row) for row in results]
         except Exception as e:
@@ -373,23 +385,23 @@ class BaseDBModel(BaseModel, ABC):
         if db is None:
             logger.warning(f"{self.__class__.__name__}._insert() 失败：数据库连接未设置")
             return -1
-        
-        table_name = self.get_table_name()
-        
+
+        table_name = self.get_table_name_with_db()
+
         # 获取所有字段（排除 None 值和内部字段）
         data = self.model_dump(exclude_none=True, exclude={'id'})
-        
+
         if not data:
             logger.warning(f"{self.__class__.__name__}._insert() 失败：没有可插入的数据")
             return -1
-        
+
         try:
             keys = list(data.keys())
             placeholders = ",".join(["%s"] * len(keys))
             # 为列名添加反引号，避免 MySQL 保留关键字冲突
             quoted_keys = [f"`{k}`" for k in keys]
-            sql = f"INSERT INTO `{table_name}` ({','.join(quoted_keys)}) VALUES ({placeholders})"
-            
+            sql = f"INSERT INTO {table_name} ({','.join(quoted_keys)}) VALUES ({placeholders})"
+
             self.id = db.execute(sql, tuple(data[k] for k in keys))
             return self.id
         except Exception as e:
@@ -402,20 +414,20 @@ class BaseDBModel(BaseModel, ABC):
         if db is None:
             logger.warning(f"{self.__class__.__name__}._update() 失败：数据库连接未设置")
             return False
-        
-        table_name = self.get_table_name()
-        
+
+        table_name = self.get_table_name_with_db()
+
         # 获取所有字段（排除 None 值和内部字段）
         data = self.model_dump(exclude_none=True, exclude={'id'})
-        
+
         if not data:
             return True
-        
+
         try:
             # 为列名添加反引号，避免 MySQL 保留关键字冲突
             sets = ",".join([f"`{k}`=%s" for k in data])
-            sql = f"UPDATE `{table_name}` SET {sets} WHERE id = %s"
-            
+            sql = f"UPDATE {table_name} SET {sets} WHERE id = %s"
+
             affected = db.execute(sql, tuple(data.values()) + (self.id,))
             return affected > 0
         except Exception as e:
@@ -438,16 +450,16 @@ class BaseDBModel(BaseModel, ABC):
         if self.id is None:
             logger.warning(f"{self.__class__.__name__}.delete() 失败：无法删除未保存的记录")
             return False
-        
+
         try:
             self.__class__._ensure_table_exists()
             db = self.get_db_connection()
             if db is None:
                 logger.warning(f"{self.__class__.__name__}.delete() 失败：数据库连接未设置")
                 return False
-            table_name = self.get_table_name()
-            sql = f"DELETE FROM `{table_name}` WHERE id = %s"
-            
+            table_name = self.get_table_name_with_db()
+            sql = f"DELETE FROM {table_name} WHERE id = %s"
+
             affected = db.execute(sql, (self.id,))
             return affected > 0
         except Exception as e:
@@ -463,9 +475,9 @@ class BaseDBModel(BaseModel, ABC):
             if db is None:
                 logger.warning(f"{cls.__name__}.delete_by_id({id_val}) 失败：数据库连接未设置")
                 return False
-            table_name = cls.get_table_name()
-            sql = f"DELETE FROM `{table_name}` WHERE id = %s"
-            
+            table_name = cls.get_table_name_with_db()
+            sql = f"DELETE FROM {table_name} WHERE id = %s"
+
             affected = db.execute(sql, (id_val,))
             return affected > 0
         except Exception as e:
@@ -485,8 +497,8 @@ class BaseDBModel(BaseModel, ABC):
             if db is None:
                 logger.warning(f"{cls.__name__}.count() 失败：数据库连接未设置")
                 return 0
-            table_name = cls.get_table_name()
-            sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
+            table_name = cls.get_table_name_with_db()
+            sql = f"SELECT COUNT(*) as count FROM {table_name}"
             result = db.execute(sql)
             return result[0]['count'] if result else 0
         except Exception as e:
