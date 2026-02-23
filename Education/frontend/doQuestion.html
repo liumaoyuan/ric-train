@@ -41,6 +41,7 @@
 
         /* 开始界面 */
         .start-screen {
+            display: none;
             text-align: center;
             padding: 40px 20px;
         }
@@ -430,11 +431,50 @@
                 opacity: 1;
             }
         }
+
+        /* 登录界面 */
+        .login-screen {
+            display: block;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .login-screen.hidden {
+            display: none;
+        }
+
+        .login-input {
+            width: 100%;
+            max-width: 400px;
+            padding: 15px 20px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            margin: 20px auto;
+            display: block;
+            transition: border-color 0.3s ease;
+        }
+
+        .login-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1 class="title">📝 在线做题系统</h1>
+
+        <!-- 登录界面 -->
+        <div class="login-screen" id="loginScreen">
+            <p style="font-size: 16px; color: #666; margin-bottom: 20px;">
+                请输入您的用户名开始做题
+            </p>
+            <input type="text" class="login-input" id="usernameInput" placeholder="请输入用户名">
+            <button class="start-btn" id="loginBtn" onclick="login()">
+                ✓ 进入系统
+            </button>
+        </div>
 
         <!-- 开始界面 -->
         <div class="start-screen" id="startScreen">
@@ -494,6 +534,29 @@
     <script>
         let currentQuestion = null;
         let userAnswer = null;
+        let username = null;
+
+        // 登录
+        function login() {
+            const input = document.getElementById('usernameInput');
+            username = input.value.trim();
+
+            if (!username) {
+                alert('请输入用户名');
+                return;
+            }
+
+            // 隐藏登录界面，显示开始界面
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('startScreen').style.display = 'block';
+        }
+
+        // 支持回车键登录
+        document.getElementById('usernameInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
 
         // 题型映射
         const questionTypeMap = {
@@ -567,6 +630,7 @@
 
         // 显示题目
         function displayQuestion(question) {
+            document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('startScreen').style.display = 'none';
             document.getElementById('loading').style.display = 'none';
             document.getElementById('questionScreen').style.display = 'block';
@@ -736,7 +800,8 @@
                     body: JSON.stringify({
                         question_id: currentQuestion.id,
                         answer: userAnswer,
-                        source: 'practice'
+                        source: 'practice',
+                        user_id: username
                     })
                 });
 
@@ -859,6 +924,7 @@
         function showLoading(text) {
             document.getElementById('loading').style.display = 'block';
             document.getElementById('loadingText').textContent = text;
+            document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('startScreen').style.display = 'none';
             document.getElementById('questionScreen').style.display = 'none';
         }

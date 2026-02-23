@@ -18,6 +18,7 @@ SM_QUESTION_GENERATE_PROMPT = """
 - question_type: 题型（single_choice|multiple_choice|fill_blank|short_answer|essay|judgement）
 - difficulty_level: 难度等级（1-5）
 - difficulty_label: 难度标签（easy|medium|hard）
+- knowledge_points: 知识点（多个知识点以逗号分隔）
 
 """
 
@@ -125,7 +126,7 @@ essay_and_short_answer_rule = """
 ai_judge_prompt = """
 ## 背景
 你是一个题目判题器，你需要根据用户的答案和题目信息，判断用户的答案是否正确。
-多选题和论述题可以酌情给分
+多选题和论述题可以酌情给分,如果是数学题，直接给出准确答案也算满分 可以省略过程
 {{ai_judge_prompt}}
 
 ### 题目

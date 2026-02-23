@@ -26,6 +26,7 @@ class QuestionPo(DefaultDbModel):
                            `hint`                VARCHAR(500) COMMENT '解题提示',
                            `ai_judge_prompt`     TEXT COMMENT 'AI判题时提示词',
                            `solution_steps`      TEXT COMMENT '解题步骤',
+                           `knowledge_points`    VARCHAR(500) COMMENT '知识点',
 
                            -- 题目元数据
                            `grade`               TINYINT UNSIGNED NOT NULL COMMENT '年级：1-12, 1-6小学 7-9初中 10-12高中',
@@ -58,6 +59,7 @@ class QuestionPo(DefaultDbModel):
                            -- 创建者信息
                            `created_by`          BIGINT UNSIGNED NOT NULL COMMENT '创建者ID',
                            `updated_by`          BIGINT UNSIGNED COMMENT '更新者ID',
+                           `status`              BIGINT UNSIGNED COMMENT '状态：0-正常 1-删除',
 
                            -- 主键
                            PRIMARY KEY (`id`),
@@ -86,6 +88,7 @@ class QuestionPo(DefaultDbModel):
     hint: Optional[str] = None
     ai_judge_prompt: Optional[str] = None
     solution_steps: Optional[str | dict | list] = None
+    knowledge_points: Optional[str] = None
     grade: int = None
     subject: str = None
     question_type: str = None
@@ -104,6 +107,7 @@ class QuestionPo(DefaultDbModel):
     updated_at: datetime = None
     created_by: int = None
     updated_by: Optional[int] = None
+    status: Optional[int] = None
 
     # 字段验证器 - 将 bool 转换为 str
     @field_validator('answer', mode='before')
