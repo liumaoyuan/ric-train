@@ -5,11 +5,14 @@ from typing import List
 
 from pydantic import BaseModel, Field
 
+from Base.Ai.base import SystemMessages, UserMessages
 from Base.Ai.llms.qwenLlm import get_default_qwen_llm
 from Base.Models.BaseParamsModel import BaseParamsModel
-from Education.Models.pojo.questionBo import QuestionRandomBo
+from Education.Models.pojo.answerPo import AnswerPo
+from Education.Models.pojo.questionBo import QuestionRandomBo, AiJudgeQuestionBo
 from Education.Models.pojo.questionPo import QuestionPo
-from Education.Prompts.questionPrompts import get_generate_question_prompt
+from Education.Prompts.common import prompt_render
+from Education.Prompts.questionPrompts import get_generate_question_prompt, ai_judge_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +43,8 @@ class QuestionService(BaseModel):
                                                                                'Education') or []
         return self.difficulty_levels
 
-    def get_question_rule(self, question_type: str):
+    @staticmethod
+    def get_question_rule(question_type: str):
         """
         根据题目类型查询出题规则
 
@@ -66,16 +70,22 @@ class QuestionService(BaseModel):
         self.question_types = []
         self.difficulty_levels = []
 
+
     def random_generate_question(self, question_random_bo: QuestionRandomBo):
+        """
+        随机生成一道题目
+        """
         subject = question_random_bo.subject or random.choice(self.get_subjects()).get('value')
         question_type = question_random_bo.question_type or random.choice(self.get_question_types()).get('value')
         difficulty_level = (question_random_bo.difficulty_level or
                             random.choice(self.get_difficulty_levels()).get('value'))
+        grade_type = question_random_bo.grade_type or random.choice(['小学', '初中', '高中'])
 
         user_prompt = f"""帮我出一道题目：
         科目：{subject}
         题型：{question_type}
-        难度：{difficulty_level}"""
+        难度：{difficulty_level}
+        年级：{grade_type}"""
 
         messages = get_generate_question_prompt(user_prompt, system_prompt_append=self.get_question_rule(question_type))
 
@@ -84,6 +94,29 @@ class QuestionService(BaseModel):
         response = json.loads(response)
         question = QuestionPo(ai_model=llm.model_name, ai_prompt=str(messages), created_by=505, **response)
         question.save()
+        return response
+
+    @staticmethod
+    def ai_judge_question(params: AiJudgeQuestionBo):
+        """
+        AI判题
+        """
+        question = QuestionPo.get_by_id(params.question_id)
+        if not question:
+            raise ValueError(f"题目不存在：{params.question_id}")
+
+        system_prompt = prompt_render(ai_judge_prompt, question.model_dump())
+        user_prompt = f"""我的答案是：{params.answer}"""
+
+        messages = [SystemMessages(prompt=system_prompt), UserMessages(prompt=user_prompt)]
+
+        llm = get_default_qwen_llm()
+        response = llm.chat(messages)
+        response = json.loads(response)
+
+        answer = AnswerPo(user_id=params.user_id, question_id=params.question_id, user_answer=params.answer,
+                          ai_model=llm.model_name, ai_prompt=str(messages),source=params.source, **response)
+        answer.save()
         return response
 
 
@@ -96,4 +129,5 @@ def get_question_service():
 
 if __name__ == '__main__':
     question_service = QuestionService()
-    print(question_service.random_generate_question())
+    res = question_service.ai_judge_question(AiJudgeQuestionBo(question_id=1, user_id='test', answer="B",source='test'))
+    print(res)

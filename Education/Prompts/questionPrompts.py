@@ -122,6 +122,35 @@ essay_and_short_answer_rule = """
 """
 
 
+ai_judge_prompt = """
+## 背景
+你是一个题目判题器，你需要根据用户的答案和题目信息，判断用户的答案是否正确。
+多选题和论述题可以酌情给分
+{{ai_judge_prompt}}
+
+### 题目
+{{question_text}}
+
+### 标准答案
+{{answer}}
+
+### 解题提示
+{{hint}}
+
+### 解题步骤
+{{solution_steps}}
+
+### 题目解析
+{{analysis}}
+
+
+## 输出格式
+请以JSON格式输出判题结果，JSON中包含以下字段：
+- score: 0-1之间的float数值 代表得分率， 1代表做对，0代表做错，0.5代表半对半错
+- ai_result: AI判题结果，包含得分依据或扣分依据
+"""
+
+
 def get_generate_question_prompt(user_prompt: str,system_prompt_append: str = ''):
     """
     获取生成题目prompt

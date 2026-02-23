@@ -1,4 +1,5 @@
-from typing import Optional, ClassVar, Union
+from datetime import datetime
+from typing import Optional, ClassVar, List
 import json
 from pydantic import field_serializer, field_validator
 from Base.Repository.models.defaultDbModel import DefaultDbModel
@@ -99,8 +100,8 @@ class QuestionPo(DefaultDbModel):
     version: Optional[int] = None
     previous_version_id: Optional[int] = None
     change_log: Optional[str] = None
-    created_at: str = None
-    updated_at: str = None
+    created_at: datetime = None
+    updated_at: datetime = None
     created_by: int = None
     updated_by: Optional[int] = None
 
@@ -123,9 +124,143 @@ class QuestionPo(DefaultDbModel):
             return json.dumps(value, ensure_ascii=False)
         return value
 
+    @property
+    def mini_dict(self):
+        return {'id': self.id,
+                'question_uuid': self.question_uuid,
+                'question_text': self.question_text,
+                'question_type': self.question_type,
+                'grade': self.grade,
+                'subject': self.subject,
+                'difficulty_level': self.difficulty_level}
+
+    @classmethod
+    def get_random_question(cls,
+                          subject: Optional[str] = None,
+                          question_type: Optional[str] = None,
+                          difficulty_level: Optional[int] = None,
+                          grade: Optional[int] = None) -> Optional['QuestionPo']:
+        """
+        根据条件随机查询一个题目
+
+        Args:
+            subject: 科目（可选）
+            question_type: 题型（可选）
+            difficulty_level: 难度等级 1-5（可选）
+            grade: 年级 1-12（可选）
+
+        Returns:
+            随机题目对象，未找到返回 None
+        """
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                return None
+
+            table_name = cls.get_table_name()
+
+            # 构建查询条件
+            where_clauses = []
+            params = []
+
+            if subject:
+                where_clauses.append("`subject` = %s")
+                params.append(subject)
+
+            if question_type:
+                where_clauses.append("`question_type` = %s")
+                params.append(question_type)
+
+            if difficulty_level:
+                where_clauses.append("`difficulty_level` = %s")
+                params.append(difficulty_level)
+
+            if grade:
+                where_clauses.append("`grade` = %s")
+                params.append(grade)
+
+            # 构建 SQL
+            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+            sql = f"SELECT * FROM `{table_name}` WHERE {where_sql} ORDER BY RAND() LIMIT 1"
+
+            result = db.execute(sql, tuple(params))
+            if result:
+                return cls(**result[0])
+            return None
+        except Exception as e:
+            logger = __import__('logging').getLogger(__name__)
+            logger.error(f"get_random_question 失败：{str(e)}")
+            return None
+
+    @classmethod
+    def get_by_id(cls, id_val) -> Optional['QuestionPo']:
+        """
+        根据 ID 或 UUID 查询记录
+
+        Args:
+            id_val: 题目 ID（整数）或 UUID（字符串）
+
+        Returns:
+            题目对象，未找到返回 None
+        """
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger = __import__('logging').getLogger(__name__)
+                logger.warning(f"{cls.__name__}.get_by_id({id_val}) 失败：数据库连接未设置")
+                return None
+
+            table_name = cls.get_table_name()
+
+            sql = f"SELECT * FROM `{table_name}` WHERE `id` = %s or `question_uuid` = %s limit 1"
+            params = (id_val,str(id_val))
+
+            result = db.execute(sql, params)
+
+            if not result:
+                return None
+
+            return cls(**result[0])
+        except Exception as e:
+            logger = __import__('logging').getLogger(__name__)
+            logger.error(f"{cls.__name__}.get_by_id({id_val}) 失败：{str(e)}")
+            return None
+
 
 
 
 if __name__ == '__main__':
     po = QuestionPo()
     po.create_table()
+
+    print("\n=== 测试随机题目查询 ===")
+
+    # 测试1：无条件随机查询
+    question = QuestionPo.get_random_question()
+    if question:
+        print(f"✓ 随机题目（无筛选）: ID={question.id}, UUID={question.question_uuid}")
+    else:
+        print("✗ 未找到题目")
+
+    # 测试2：按科目随机查询
+    question = QuestionPo.get_random_question(subject="math")
+    if question:
+        print(f"✓ 随机数学题: ID={question.id}, 题型={question.question_type}")
+    else:
+        print("✗ 未找到数学题目")
+
+    # 测试3：按科目和题型随机查询
+    question = QuestionPo.get_random_question(subject="math", question_type="single_choice")
+    if question:
+        print(f"✓ 随机数学单选题: ID={question.id}, 难度={question.difficulty_level}")
+    else:
+        print("✗ 未找到符合条件的题目")
+
+    # 测试4：按难度随机查询
+    question = QuestionPo.get_random_question(difficulty_level=3)
+    if question:
+        print(f"✓ 随机中等难度题: ID={question.id}, 科目={question.subject}")
+    else:
+        print("✗ 未找到中等难度题目")
