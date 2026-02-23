@@ -65,13 +65,14 @@ class BaseParamsModel(BaseModuleDBModel):
     updated_by: Optional[int] = Field(None, description="更新人ID")
 
     @classmethod
-    def get_param_by_code(cls, code: str, type: Optional[str] = None) -> Optional[dict]:
+    def get_param_by_code(cls, code: str, type: Optional[str] = None,parent_code: Optional[str] = None) -> Optional[dict]:
         """
         根据参数编码获取参数信息（只返回启用的）
 
         Args:
             code: 参数编码
             type: 参数类型（可选）
+            parent_code: 父级参数编码（可选）
 
         Returns:
             包含 code、value、desc 的字典，未找到返回 None
@@ -80,7 +81,7 @@ class BaseParamsModel(BaseModuleDBModel):
 
     @staticmethod
     @lru_cache(maxsize=128)
-    def _cached_get_param_by_code(cls, code: str, type: Optional[str] = None) -> Optional[dict]:
+    def _cached_get_param_by_code(cls, code: str, type: Optional[str] = None, parent_code: Optional[str] = None) -> Optional[dict]:
         """
         带缓存的参数查询方法（内部使用）
 
@@ -88,6 +89,7 @@ class BaseParamsModel(BaseModuleDBModel):
             cls: 类对象
             code: 参数编码
             type: 参数类型（可选）
+            parent_code: 父级参数编码（可选）
 
         Returns:
             包含 code、value、desc 的字典，未找到返回 None
@@ -98,13 +100,16 @@ class BaseParamsModel(BaseModuleDBModel):
             if db is None:
                 return None
 
-            table_name = cls.get_table_name()
-            sql = f"SELECT `code`, `value`, `desc` FROM `{table_name}` WHERE `code` = %s AND `status` = 1"
+            table_name = cls.get_table_name_with_db()
+            sql = f"SELECT `code`, `value`, `desc` FROM {table_name} WHERE `code` = %s AND `status` = 1"
             params = [code]
 
             if type is not None:
                 sql += " AND `type` = %s"
                 params.append(type)
+            if parent_code is not None:
+                sql += " AND `parent_code` = %s"
+                params.append(parent_code)
 
             result = db.execute(sql, tuple(params))
             if result:
