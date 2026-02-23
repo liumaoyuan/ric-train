@@ -483,6 +483,120 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{cls.__name__}.delete_by_id({id_val}) 失败：{str(e)}")
             return False
+
+    @classmethod
+    def bulk_insert(cls, instances: List['BaseDBModel'], batch_size: int = 1000) -> List[int]:
+        """
+        批量插入记录（高效插入）
+
+        使用单条 SQL 语句插入多条记录，提高性能。
+
+        Args:
+            instances: BaseDBModel 实例列表
+            batch_size: 每批插入的记录数，默认 1000（大数据量时建议分批）
+
+        Returns:
+            新插入记录的 ID 列表
+
+        Example:
+            # 创建多个对象
+            users = [
+                User(name="张三", email="zhangsan@example.com"),
+                User(name="李四", email="lisi@example.com"),
+                User(name="王五", email="wangwu@example.com")
+            ]
+
+            # 批量插入
+            ids = User.bulk_insert(users)
+            print(f"插入了 {len(ids)} 条记录，IDs: {ids}")
+
+            # 大数据量分批插入
+            large_data = [User(name=f"用户{i}") for i in range(10000)]
+            ids = User.bulk_insert(large_data, batch_size=500)
+        """
+        if not instances:
+            logger.warning(f"{cls.__name__}.bulk_insert() 失败：实例列表为空")
+            return []
+
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.bulk_insert() 失败：数据库连接未设置")
+                return []
+
+            table_name = cls.get_table_name_with_db()
+
+            # 确定所有对象共有的字段（取所有字段的并集）
+            all_fields = set()
+            for instance in instances:
+                data = instance.model_dump(exclude_none=True, exclude={'id'})
+                all_fields.update(data.keys())
+
+            if not all_fields:
+                logger.warning(f"{cls.__name__}.bulk_insert() 失败：没有可插入的数据")
+                return []
+
+            fields = list(all_fields)
+            quoted_fields = [f"`{f}`" for f in fields]
+
+            # 分批插入
+            all_ids = []
+            total_instances = len(instances)
+
+            for i in range(0, total_instances, batch_size):
+                batch = instances[i:i + batch_size]
+                batch_data = []
+
+                # 构建批量数据
+                for instance in batch:
+                    data = instance.model_dump(exclude_none=True, exclude={'id'})
+                    # 按照字段顺序取值
+                    row_data = [data.get(field) for field in fields]
+                    batch_data.append(row_data)
+
+                # 构建批量插入 SQL
+                placeholders = ",".join([f"({','.join(['%s'] * len(fields))})"] * len(batch_data))
+                sql = f"INSERT INTO {table_name} ({','.join(quoted_fields)}) VALUES {placeholders}"
+
+                # 展平参数列表
+                params = [item for row in batch_data for item in row]
+
+                # 执行批量插入
+                try:
+                    affected_rows = db.execute(sql, tuple(params), commit=True)
+
+                    # 获取插入的 ID（MySQL）
+                    # 注意：不同数据库获取批量插入 ID 的方式不同
+                    if hasattr(db, 'config') and db.config.get("type", "mysql").lower() == "mysql":
+                        # MySQL: 获取最后插入的 ID，批量插入的 ID 是连续的
+                        last_id = db.execute("SELECT LAST_INSERT_ID() as last_id")[0]['last_id']
+                        if affected_rows > 0:
+                            start_id = last_id - affected_rows + 1
+                            all_ids.extend(list(range(start_id, last_id + 1)))
+                    else:
+                        # 其他数据库：无法准确获取批量插入的 ID，返回空列表
+                        logger.warning(
+                            f"{cls.__name__}.bulk_insert() 批量插入成功，但当前数据库类型不支持返回 ID 列表"
+                        )
+
+                    logger.info(
+                        f"{cls.__name__}.bulk_insert() 成功：第 {i//batch_size + 1} 批，"
+                        f"插入了 {affected_rows} 条记录"
+                    )
+
+                except Exception as e:
+                    logger.error(
+                        f"{cls.__name__}.bulk_insert() 批量插入失败（第 {i//batch_size + 1} 批）：{str(e)}"
+                    )
+                    raise
+
+            logger.info(f"{cls.__name__}.bulk_insert() 成功：总计插入了 {len(all_ids)} 条记录")
+            return all_ids
+
+        except Exception as e:
+            logger.error(f"{cls.__name__}.bulk_insert() 失败：{str(e)}")
+            return []
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
