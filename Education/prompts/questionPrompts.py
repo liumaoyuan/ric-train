@@ -14,11 +14,13 @@ SM_QUESTION_GENERATE_PROMPT = """
 - ai_judge_prompt: AI判题时提示词
 - solution_steps: 解题步骤
 - grade: 年级（1-12, 1-6小学 7-9初中 10-12高中，根据题目难度进行合适分配） 
-- subject: 科目（chinese|math|english|physics|chemistry|biology|history|geography|politics...）
-- question_type: 题型（single_choice|multiple_choice|fill_blank|short_answer|essay|judgement）
+- subject: 科目（{{subject}}）
+- question_type: 题型（{{question_type}}）
 - difficulty_level: 难度等级（1-5）
 - difficulty_label: 难度标签（easy|medium|hard）
 - knowledge_points: 知识点（多个知识点以逗号分隔）
+
+{{append}}
 
 """
 

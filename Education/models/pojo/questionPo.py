@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, ClassVar, List
 import json
-from pydantic import field_serializer, field_validator
+from pydantic import field_serializer, field_validator, Field
 from Base.Repository.models.defaultDbModel import DefaultDbModel
 
 
@@ -78,36 +78,51 @@ class QuestionPo(DefaultDbModel):
                        """
 
     # 字段类型注解
-    id: Optional[int] = None
-    question_uuid: str = None
-    question_text: str = None
-    question_html: Optional[str] = None
-    question_markdown: Optional[str] = None
-    answer: Optional[str | dict | list | bool] = None
-    analysis: Optional[str] = None
-    hint: Optional[str] = None
-    ai_judge_prompt: Optional[str] = None
-    solution_steps: Optional[str | dict | list] = None
-    knowledge_points: Optional[str] = None
-    grade: int = None
-    subject: str = None
-    question_type: str = None
-    difficulty_level: Optional[int] = None
-    difficulty_label: Optional[str] = None
-    images: Optional[str] = None
-    audio_url: Optional[str] = None
-    video_url: Optional[str] = None
-    ai_model: Optional[str] = None
-    ai_prompt: Optional[str] = None
-    ai_params: Optional[str] = None
-    version: Optional[int] = None
-    previous_version_id: Optional[int] = None
-    change_log: Optional[str] = None
-    created_at: datetime = None
-    updated_at: datetime = None
-    created_by: int = None
-    updated_by: Optional[int] = None
-    status: Optional[int] = None
+    id: Optional[int] = Field(None, description="题目ID")
+    question_uuid: str = Field(None, description="题目UUID")
+    question_text: str = Field(None, description="题干")
+    question_html: Optional[str] = Field(None, description="题干（HTML格式）")
+    question_markdown: Optional[str] = Field(None, description="题干（Markdown格式）")
+    answer: Optional[str | dict | list | bool] = Field(None, description="标准答案")
+    analysis: Optional[str] = Field(None, description="题目解析")
+    hint: Optional[str] = Field(None, description="解题提示")
+    ai_judge_prompt: Optional[str] = Field(None, description="AI判题时提示词")
+    solution_steps: Optional[str | dict | list] = Field(None, description="解题步骤")
+    knowledge_points: Optional[str] = Field(None, description="知识点")
+    grade: int = Field(None, description="年级")
+    subject: str = Field(None, description="科目")
+    question_type: str = Field(None, description="题型")
+    difficulty_level: Optional[int] = Field(None, description="难度等级")
+    difficulty_label: Optional[str] = Field(None, description="难度标签")
+    images: Optional[str] = Field(None, description="图片资源URL列表")
+    audio_url: Optional[str] = Field(None, description="音频资源URL")
+    video_url: Optional[str] = Field(None, description="视频解析URL")
+    ai_model: Optional[str] = Field(None, description="AI模型名称")
+    ai_prompt: Optional[str] = Field(None, description="生成时使用的prompt")
+    ai_params: Optional[str] = Field(None, description="其他AI参数")
+    version: Optional[int] = Field(None, description="版本号")
+    previous_version_id: Optional[int] = Field(None, description="上一版本ID")
+    change_log: Optional[str] = Field(None, description="变更说明")
+    created_at: Optional[datetime] = Field(None, description="创建时间")
+    updated_at: Optional[datetime] = Field(None, description="更新时间")
+    created_by: int = Field(None, description="创建者ID")
+    updated_by: Optional[int] = Field(None, description="更新者ID")
+    status: Optional[int] = Field(None, description="状态")
+
+    @staticmethod
+    def get_field_mapping() -> dict:
+        """
+        获取字段名到中文描述的映射
+
+        Returns:
+            dict: 字段名到中文描述的映射字典
+        """
+        field_mapping = {}
+        for field_name, field_info in QuestionPo.model_fields.items():
+            # 获取 Field 的 description 属性
+            if hasattr(field_info, 'description') and field_info.description:
+                field_mapping[field_name] = field_info.description
+        return field_mapping
 
     # 字段验证器 - 将 bool 转换为 str
     @field_validator('answer', mode='before')

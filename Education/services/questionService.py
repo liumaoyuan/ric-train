@@ -8,11 +8,11 @@ from pydantic import BaseModel, Field
 from Base.Ai.base import SystemMessages, UserMessages
 from Base.Ai.llms.qwenLlm import get_default_qwen_llm
 from Base.Models.BaseParamsModel import BaseParamsModel
-from Education.Models.pojo.answerPo import AnswerPo
-from Education.Models.pojo.questionBo import QuestionRandomBo, AiJudgeQuestionBo
-from Education.Models.pojo.questionPo import QuestionPo
-from Education.Prompts.common import prompt_render
-from Education.Prompts.questionPrompts import get_generate_question_prompt, ai_judge_prompt
+from Education.prompts.common import prompt_render
+from Education.prompts.questionPrompts import ai_judge_prompt, SM_QUESTION_GENERATE_PROMPT
+from Education.models.pojo.answerPo import AnswerPo
+from Education.models.pojo.questionBo import QuestionRandomBo, AiJudgeQuestionBo
+from Education.models.pojo.questionPo import QuestionPo
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,8 @@ class QuestionService(BaseModel):
         if not self.knowledge_points.get(code):
             # 从数据库查询知识点
             try:
-                knowledge_point = BaseParamsModel.get_param_by_code(code=code, type='Education', parent_code='edu_knowledge_point')
+                knowledge_point = BaseParamsModel.get_param_by_code(code=code, type='Education',
+                                                                    parent_code='edu_knowledge_point')
                 if knowledge_point:
                     self.knowledge_points[code] = knowledge_point.get('value', '')
                     logger.info(f"成功获取知识点: {code}, 值: {self.knowledge_points[code][:50]}...")
@@ -154,7 +155,11 @@ class QuestionService(BaseModel):
         年级：{grade_type}
         知识点：{knowledge_points} """
 
-        messages = get_generate_question_prompt(user_prompt, system_prompt_append=self.get_question_rule(question_type))
+        system_msg = prompt_render(SM_QUESTION_GENERATE_PROMPT, {"subject": self.get_subjects(),
+                                                                 "append": self.get_question_rule(question_type),
+                                                                 "question_type": self.get_question_types()})
+
+        messages = [SystemMessages(prompt=system_msg), UserMessages(prompt=user_prompt)]
 
         llm = get_default_qwen_llm()
         response = llm.chat(messages)

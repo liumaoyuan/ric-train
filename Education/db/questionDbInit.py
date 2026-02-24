@@ -1,8 +1,8 @@
 from Base.Ai.base import SystemMessages, UserMessages
 from Base.Ai.llms.qwenLlm import get_default_qwen_llm
 from Base.Models.BaseParamsModel import BaseParamsModel
-from Education.Models.pojo.questionPo import QuestionPo
-from Education.Prompts.questionPrompts import (
+from Education.models.pojo.questionPo import QuestionPo
+from Education.prompts.questionPrompts import (
     single_choice_rule,
     multiple_choice_rule,
     judgement_rule,

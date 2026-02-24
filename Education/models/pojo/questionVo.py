@@ -1,6 +1,6 @@
 from pydantic import Field
 
-from Education.Models.pojo.questionBo import QuestionRandomBo
+from Education.models.pojo.questionBo import QuestionRandomBo
 
 
 class QuestionRandomParamVo(QuestionRandomBo):
