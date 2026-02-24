@@ -550,7 +550,7 @@ class BaseDBModel(BaseModel, ABC):
 
                 # 构建批量数据
                 for instance in batch:
-                    data = instance.model_dump(exclude_none=True, exclude={'id'})
+                    data = instance.model_dump(exclude_none=False, exclude={'id'})
                     # 按照字段顺序取值
                     row_data = [data.get(field) for field in fields]
                     batch_data.append(row_data)
@@ -564,16 +564,29 @@ class BaseDBModel(BaseModel, ABC):
 
                 # 执行批量插入
                 try:
-                    affected_rows = db.execute(sql, tuple(params), commit=True)
+                    batch_size_actual = len(batch_data)
+                    db.execute(sql, tuple(params), commit=True)
+                    logger.info(f"批量插入SQL执行成功，本批 {batch_size_actual} 条")
 
                     # 获取插入的 ID（MySQL）
                     # 注意：不同数据库获取批量插入 ID 的方式不同
+                    db_config = getattr(db, 'config', {})
+                    logger.debug(f"数据库配置: {db_config}, type类型: {db_config.get('type', 'mysql')}")
+
                     if hasattr(db, 'config') and db.config.get("type", "mysql").lower() == "mysql":
+                        logger.info("检测到MySQL数据库，尝试获取插入ID")
                         # MySQL: 获取最后插入的 ID，批量插入的 ID 是连续的
-                        last_id = db.execute("SELECT LAST_INSERT_ID() as last_id")[0]['last_id']
-                        if affected_rows > 0:
-                            start_id = last_id - affected_rows + 1
-                            all_ids.extend(list(range(start_id, last_id + 1)))
+                        result = db.execute("SELECT LAST_INSERT_ID() as last_id")
+                        logger.info(f"LAST_INSERT_ID() 查询结果: {result}")
+
+                        if result and result[0]:
+                            last_id = int(result[0]['last_id'])
+                            logger.info(f"last_id 值: {last_id}, 类型: {type(last_id)}")
+                            if last_id > 0:
+                                start_id = last_id - batch_size_actual + 1
+                                id_range = list(range(start_id, last_id + 1))
+                                all_ids.extend(id_range)
+                                logger.info(f"成功添加ID到列表: {id_range}, 当前all_ids长度: {len(all_ids)}")
                     else:
                         # 其他数据库：无法准确获取批量插入的 ID，返回空列表
                         logger.warning(
@@ -582,7 +595,7 @@ class BaseDBModel(BaseModel, ABC):
 
                     logger.info(
                         f"{cls.__name__}.bulk_insert() 成功：第 {i//batch_size + 1} 批，"
-                        f"插入了 {affected_rows} 条记录"
+                        f"本批插入 {batch_size_actual} 条记录，累计插入 {len(all_ids) + batch_size_actual} 条"
                     )
 
                 except Exception as e:
@@ -591,7 +604,6 @@ class BaseDBModel(BaseModel, ABC):
                     )
                     raise
 
-            logger.info(f"{cls.__name__}.bulk_insert() 成功：总计插入了 {len(all_ids)} 条记录")
             return all_ids
 
         except Exception as e:

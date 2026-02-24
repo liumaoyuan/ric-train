@@ -1,6 +1,8 @@
 import io
+import uuid
+from datetime import datetime
 from typing import List, Optional, Union
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 
@@ -142,3 +144,98 @@ def dict_list_to_excel_stream(data: List[dict], sheet_name: str = "Sheet1") -> i
     """
     excel_bytes = dict_list_to_excel(data, sheet_name=sheet_name)
     return io.BytesIO(excel_bytes)
+
+
+def excel_to_dict_list(
+    file_path: Optional[str] = None,
+    file_obj: Optional[io.BytesIO] = None,
+    sheet_name: Optional[str] = None,
+    field_name_map: Optional[dict] = None,
+    skip_rows: int = 1,
+    skip_empty_rows: bool = True
+) -> List[dict]:
+    """
+    读取 Excel 文件并转换为字典列表
+
+    Args:
+        file_path: Excel 文件路径（可选，与 file_obj 二选一）
+        file_obj: Excel 文件对象（BytesIO 或 File-like），优先使用 file_obj（可选）
+        sheet_name: 工作表名称，默认读取第一个工作表
+        field_name_map: 字段名映射字典，key为Excel列名（中文），value为目标字段名（英文）
+        skip_rows: 跳过的行数（表头），默认跳过1行
+        skip_empty_rows: 是否跳过空行，默认为 True
+
+    Returns:
+        字典列表，每个字典代表一行数据
+
+    Example:
+        # 示例1：从文件路径读取
+        data = excel_to_dict_list(file_path='data.xlsx')
+
+        # 示例2：从文件对象读取
+        from fastapi import UploadFile
+        file_obj = await upload_file.read()
+        data = excel_to_dict_list(file_obj=io.BytesIO(file_obj))
+
+        # 示例3：使用字段名映射（中文 -> 英文）
+        data = excel_to_dict_list(
+            file_path='data.xlsx',
+            field_name_map={'姓名': 'name', '年龄': 'age', '城市': '城市'}
+        )
+        # 返回: [{'name': '张三', 'age': 25, 'city': '北京'}, ...]
+    """
+    if not file_path and not file_obj:
+        raise ValueError("必须提供 file_path 或 file_obj 参数")
+
+    try:
+        # 优先使用 file_obj，否则使用 file_path
+        if file_obj:
+            file_obj.seek(0)  # 重置指针
+            wb = load_workbook(file_obj)
+        else:
+            wb = load_workbook(file_path)
+
+        # 获取工作表
+        if sheet_name:
+            ws = wb[sheet_name]
+        else:
+            ws = wb.active
+
+        data_list = []
+
+        # 获取表头
+        headers = []
+        for col in range(1, ws.max_column + 1):
+            header = ws.cell(row=1, column=col).value
+            if header:
+                # 如果提供了字段名映射，进行转换
+                if field_name_map and header in field_name_map:
+                    header = field_name_map[header]
+                headers.append(header)
+
+        # 从第二行开始读取数据
+        for row_idx in range(skip_rows + 1, ws.max_row + 1):
+            row_data = {}
+
+            # 读取每列数据
+            for col_idx, header in enumerate(headers, start=1):
+                cell_value = ws.cell(row=row_idx, column=col_idx).value
+
+                # 处理不同类型的单元格值
+                if isinstance(cell_value, datetime):
+                    cell_value = cell_value.strftime('%Y-%m-%d %H:%M:%S')
+                elif cell_value is None:
+                    cell_value = ""
+
+                row_data[header] = cell_value
+
+            # 跳过空行
+            if skip_empty_rows and not any(row_data.values()):
+                continue
+
+            data_list.append(row_data)
+
+        return data_list
+
+    except Exception as e:
+        raise ValueError(f"读取 Excel 文件失败：{str(e)}")
