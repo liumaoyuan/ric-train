@@ -1,8 +1,12 @@
 import logging
-from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar, Union, get_type_hints
-from abc import ABC, abstractmethod
-from pydantic import BaseModel, Field, ConfigDict
-from pymilvus import CollectionSchema, FieldSchema, DataType, Function, FunctionType
+from abc import ABC
+from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar, get_type_hints
+
+from pydantic import BaseModel, ConfigDict
+from pymilvus import CollectionSchema, FieldSchema, DataType, Function, FunctionType, AnnSearchRequest
+
+from Base.Repository.base.baseVDBConnection import BaseVDBConnection
+from Base.Repository.connections.milvusConnection import get_default_milvus_vdb_connection
 
 logger = logging.getLogger(__name__)
 T = TypeVar('T', bound='BaseVDBModel')
@@ -28,77 +32,6 @@ class VectorFieldInfo:
         self.metric_type = metric_type
         self.index_type = index_type
         self.index_params = index_params or {}
-
-
-class BaseVDBConnection(ABC):
-    """
-    向量数据库连接抽象基类
-    所有向量数据库连接类都需要继承此类并实现相应方法
-    """
-
-    @abstractmethod
-    def has_collection(self, collection_name: str) -> bool:
-        """检查集合是否存在"""
-        pass
-
-    @abstractmethod
-    def create_collection(
-            self,
-            collection_name: str,
-            schema: Any,
-            description: Optional[str] = None,
-            index_params: Optional[List[Dict]] = None
-    ):
-        """创建集合"""
-        pass
-
-    @abstractmethod
-    def insert(self, collection_name: str, data: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """插入数据"""
-        pass
-
-    @abstractmethod
-    def search(
-            self,
-            collection_name: str,
-            data: Any,
-            search_params: Optional[dict] = None,
-            anns_field: Optional[str] = None,
-            limit: int = 5,
-            filter_expr: str = "",
-            output_fields: List[str] = None
-    ) -> List:
-        """向量搜索"""
-        pass
-
-    @abstractmethod
-    def query(
-            self,
-            collection_name: str,
-            filter: str = "",
-            output_fields: Optional[List[str]] = None,
-            timeout: Optional[float] = None,
-            ids: Optional[Any] = None,
-            partition_names: Optional[List[str]] = None,
-            limit: Optional[int] = None,
-    ):
-        """标量查询"""
-        pass
-
-    @abstractmethod
-    def delete(self, collection_name: str, filter: str) -> Dict[str, Any]:
-        """删除数据"""
-        pass
-
-    @abstractmethod
-    def upsert(self, collection_name: str, data: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Upsert（更新或插入）"""
-        pass
-
-    @abstractmethod
-    def describe_collection(self, collection_name: str) -> Dict[str, Any]:
-        """描述集合结构"""
-        pass
 
 
 class BaseVDBModel(BaseModel, ABC):
@@ -181,7 +114,7 @@ class BaseVDBModel(BaseModel, ABC):
     _vector_fields_config: ClassVar[Optional[Dict[str, Dict[str, Any]]]] = {
         'index_type': 'HNSW',
         'metric_type': 'COSINE',
-        'params' : {"M": 8, "efConstruction": 64}
+        'params': {"M": 8, "efConstruction": 64}
     }
 
     # 类变量：稀疏向量字段配置（可选）
@@ -200,14 +133,13 @@ class BaseVDBModel(BaseModel, ABC):
     _bm25_functions: ClassVar[Optional[List[Dict[str, str]]]] = None
 
     # 类变量：默认向量数据库连接（全局默认）
-    _default_vdb_connection: ClassVar[Optional[BaseVDBConnection]] = None
+    _default_vdb_connection: ClassVar[Optional[BaseVDBConnection]] = get_default_milvus_vdb_connection()
     # 类变量：每个类可以有自己的连接
-    _vdb_connection: ClassVar[Optional[BaseVDBConnection]] = None
+    _vdb_connection: ClassVar[Optional[BaseVDBConnection]] = get_default_milvus_vdb_connection()
     # 实例变量：实例级别的连接（优先级最高）
-    _instance_vdb_connection: Optional[BaseVDBConnection] = None
+    _instance_vdb_connection: Optional[BaseVDBConnection] = get_default_milvus_vdb_connection()
     # 类变量：集合检查缓存（避免重复检查）
     _collection_checked: ClassVar[bool] = False
-
 
     def __init__(self, **data):
         """初始化模型实例，并在需要时自动创建集合"""
@@ -263,6 +195,8 @@ class BaseVDBModel(BaseModel, ABC):
                     # auto_id=True 时，排除 id 字段
                     exclude_fields.add('id')
 
+        for i in cls._detect_sparse_fields():
+            exclude_fields.add(i)
         return exclude_fields
 
     @classmethod
@@ -304,8 +238,8 @@ class BaseVDBModel(BaseModel, ABC):
             # 2. 跳过以 '_' 开头的字段
             # 3. 跳过稀疏向量字段
             if (field_name in class_vars or
-                field_name.startswith('_') or
-                field_name in sparse_fields):
+                    field_name.startswith('_') or
+                    field_name in sparse_fields):
                 continue
 
             field_info = cls.model_fields.get(field_name)
@@ -413,9 +347,9 @@ class BaseVDBModel(BaseModel, ABC):
             # 3. 跳过 ClassVar 类型的变量
             # 4. 跳过以 '_' 开头的字段（类变量、私有变量、静态变量）
             if (field_name in vector_fields or
-                field_name in sparse_fields or
-                field_name in class_vars or
-                field_name.startswith('_')):
+                    field_name in sparse_fields or
+                    field_name in class_vars or
+                    field_name.startswith('_')):
                 continue
 
             field_info = cls.model_fields.get(field_name)
@@ -620,9 +554,6 @@ class BaseVDBModel(BaseModel, ABC):
         # 将模型转换为字典，排除 None 值和需要排除的字段
         data_dict = self.model_dump(exclude=exclude_fields if exclude_fields else None, exclude_none=True)
 
-        # 额外过滤：移除空列表和空字符串（这些是默认值，不应写入数据库）
-        data_dict = {k: v for k, v in data_dict.items() if v != [] and v != ""}
-
         # 插入数据
         result = connection.insert(collection_name, [data_dict])
         return result
@@ -661,28 +592,50 @@ class BaseVDBModel(BaseModel, ABC):
         return connection.insert(collection_name, data_list)
 
     @classmethod
-    def search(
-        cls,
-        vectors: Union[List[float], List[List[float]]],
-        vector_field: Optional[str] = None,
-        limit: int = 5,
-        filter_expr: str = "",
-        output_fields: Optional[List[str]] = None,
-        search_params: Optional[Dict[str, Any]] = None
+    def hybrid_search(
+            cls,
+            queries: List[Dict[str, Any]],
+            limit: int = 5,
+            ranker: Optional[Any] = None,
+            filter_expr: str = "",
+            output_fields: Optional[List[str]] = None,
+            weights: Optional[List[float]] = None
     ) -> List[Dict[str, Any]]:
         """
-        向量搜索
-
+        高易用性的混合检索函数（支持密集向量 + 稀疏向量混合搜索）
+        
         Args:
-            vectors: 查询向量数据（单个或多个）
-            vector_field: 用于搜索的向量字段名，如果为 None 则自动检测第一个向量字段
-            limit: 返回结果数量
-            filter_expr: 过滤表达式
+            queries: 查询列表，每个查询包含以下字段：
+                - data: 向量数据（密集向量）或查询文本（稀疏向量）
+                - field: 对应的字段名
+                - type: 向量类型 ('dense' 或 'sparse')
+                - params: 搜索参数（可选）
+                - limit: 该查询的返回结果数（可选，默认使用全局limit）
+            limit: 总体返回结果数量
+            ranker: 排序器，默认使用 RRFRanker
+            filter_expr: 全局过滤表达式
             output_fields: 返回的字段列表
-            search_params: 搜索参数
-
+            weights: 各查询的权重列表，用于加权融合（可选）
+            
         Returns:
-            List: 搜索结果列表
+            List[Dict[str, Any]]: 搜索结果列表
+            
+        Example:
+            # 密集向量 + 稀疏向量混合搜索
+            results = MyModel.hybrid_search([
+                {
+                    'data': [0.1, 0.2, 0.3, ...],  # 密集向量
+                    'field': 'embedding',
+                    'type': 'dense',
+                    'params': {'metric_type': 'COSINE', 'params': {'nprobe': 10}}
+                },
+                {
+                    'data': "机器学习",  # 查询文本
+                    'field': 'content_sparse',
+                    'type': 'sparse',
+                    'params': {'metric_type': 'BM25'}
+                }
+            ], limit=10, weights=[0.7, 0.3])
         """
         connection = cls.get_connection()
         if connection is None:
@@ -690,41 +643,170 @@ class BaseVDBModel(BaseModel, ABC):
 
         collection_name = cls.get_collection_name()
 
-        # 自动检测向量字段
-        if vector_field is None:
-            vector_fields = cls._detect_vector_fields()
-            if not vector_fields:
-                raise ValueError(f"没有检测到向量字段")
-            vector_field = vector_fields[0]
-            logger.debug(f"自动使用向量字段: {vector_field}")
+        # 验证输入参数
+        if not queries:
+            raise ValueError("queries 参数不能为空")
 
-        # 默认搜索参数
-        if search_params is None:
-            search_params = {
-                "metric_type": cls._vector_fields_config['metric_type'],
-                "params": {"nprobe": 10}
-            }
+        # 如果没有提供 ranker，使用默认的 RRFRanker
+        if ranker is None:
 
-        # 处理单个向量 vs 多个向量
-        if vectors and isinstance(vectors[0], float):
-            vectors = [vectors]
+            # 如果提供了权重，使用加权 ranker
+            if weights and len(weights) == len(queries):
+                ranker_params = {
+                    "reranker": "weighted",  # 改为支持的 weighted
+                    "k": 60,
+                    "weights": weights
+                }
+            else:
+                ranker_params = {
+                    "reranker": "rrf",
+                    "k": 60
+                }
 
-        return connection.search(
-            collection_name=collection_name,
-            data=vectors,
-            search_params=search_params,
-            anns_field=vector_field,
+            ranker = Function(
+                name="rrf",
+                input_field_names=[],
+                function_type=FunctionType.RERANK,
+                params=ranker_params
+            )
+
+        # 构建 AnnSearchRequest 列表
+        search_requests = []
+
+        for i, query in enumerate(queries):
+            # 验证必需字段
+            required_fields = ['data', 'field', 'type']
+            for field in required_fields:
+                if field not in query:
+                    raise ValueError(f"查询 {i} 缺少必需字段: {field}")
+
+            data = query['data']
+            field_name = query['field']
+            vector_type = query['type'].lower()
+            search_params = query.get('params', {})
+            query_limit = query.get('limit', limit)
+
+            # 根据向量类型构建不同的搜索请求
+            if vector_type == 'dense':
+                # 密集向量搜索
+                if not search_params:
+                    search_params = {
+                        "metric_type": cls._vector_fields_config.get('metric_type', 'COSINE'),
+                        "params": {"nprobe": 10}
+                    }
+
+                # 处理单个向量
+                if data and isinstance(data[0], float):
+                    data = [data]
+
+                search_param = {
+                    "data": data,
+                    "anns_field": field_name,
+                    "param": search_params,
+                    "limit": query_limit
+                }
+                if filter_expr:
+                    search_param["expr"] = filter_expr
+
+                search_request = AnnSearchRequest(**search_param)
+
+            elif vector_type == 'sparse':
+                # 稀疏向量搜索（BM25）
+                if not search_params:
+                    search_params = {
+                        "metric_type": "BM25",
+                        "params": {}
+                    }
+
+                # 稀疏向量搜索使用文本数据
+                if isinstance(data, list):
+                    data = " ".join(data)  # 将关键词列表转换为文本
+
+                search_param = {
+                    "data": [data],  # 文本需要包装成列表
+                    "anns_field": field_name,
+                    "param": search_params,
+                    "limit": query_limit
+                }
+                if filter_expr:
+                    search_param["expr"] = filter_expr
+
+                search_request = AnnSearchRequest(**search_param)
+            else:
+                raise ValueError(f"不支持的向量类型: {vector_type}，支持的类型: dense, sparse")
+
+            search_requests.append(search_request)
+            logger.debug(f"构建搜索请求 {i}: 字段={field_name}, 类型={vector_type}")
+
+        # 执行混合搜索
+        try:
+            # 使用 client.hybrid_search 而不是 connection.hybrid_search
+            results = connection.client.hybrid_search(
+                collection_name=collection_name,
+                reqs=search_requests,
+                ranker=ranker,
+                limit=limit,
+                output_fields=output_fields
+            )
+
+            # 正确处理返回结果 - 遍历 SearchResult 和 Hits
+            formatted_results = []
+            for hits in results:  # 遍历每个查询的结果 (Hits 对象)
+                for hit in hits:  # 遍历每个命中的实体
+                    result_dict = {
+                        'id': hit.id,
+                        'distance': hit.distance,
+                        'score': hit.score
+                    }
+                    # 添加输出字段
+                    if output_fields:
+                        for field in output_fields:
+                            if field not in ['id', 'distance', 'score']:
+                                result_dict[field] = hit.get(field)
+                    formatted_results.append(result_dict)
+
+            logger.info(f"混合搜索完成，返回 {len(formatted_results)} 条结果")
+
+            # 打印前三条数据的 distance 和 id
+            if formatted_results and len(formatted_results) > 0:
+                logger.info("前三条搜索结果:")
+                for i, result in enumerate(formatted_results[:3]):
+                    distance = result.get('distance', 'N/A')
+                    score = result.get('score', 'N/A')
+                    id_value = result.get('id', 'N/A')
+                    logger.info(f"  [{i + 1}] ID: {id_value}, Distance: {distance}, Score: {score}")
+
+            return formatted_results
+
+        except Exception as e:
+            logger.error(f"混合搜索执行失败: {e}")
+            raise
+
+    @classmethod
+    def search(cls,
+               data: list[float],
+               anns_field: str = None,
+               limit: int = 10,
+               search_params: dict = None,
+               output_fields: list[str] = None
+               ):
+        if anns_field is None:
+            anns_field = cls._detect_vector_fields()[0]
+        return cls.get_connection().search(
+            collection_name=cls.get_collection_name(),
+            data=[data],
+            anns_field=anns_field,
+            search_params=search_params or {"metric_type": "COSINE"},
             limit=limit,
-            filter_expr=filter_expr,
-            output_fields=output_fields
+            output_fields=output_fields or ["*"]
         )
 
     @classmethod
     def query(
-        cls,
-        filter: str = "",
-        output_fields: Optional[List[str]] = None,
-        limit: Optional[int] = None
+            cls,
+            filter: str = "",
+            output_fields: Optional[List[str]] = None,
+            limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """
         标量查询
@@ -752,10 +834,10 @@ class BaseVDBModel(BaseModel, ABC):
 
     @classmethod
     def find_by(
-        cls,
-        filter: str = "",
-        output_fields: Optional[List[str]] = None,
-        limit: Optional[int] = None
+            cls,
+            filter: str = "",
+            output_fields: Optional[List[str]] = None,
+            limit: Optional[int] = None
     ) -> List[T]:
         """
         根据条件查找并返回模型实例列表
@@ -859,5 +941,3 @@ class BaseVDBModel(BaseModel, ABC):
         ]
 
         return connection.upsert(collection_name, data_list)
-
-

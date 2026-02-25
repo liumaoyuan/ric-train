@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar
+from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar, Literal
 from abc import ABC, abstractproperty
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -313,8 +313,36 @@ class BaseDBModel(BaseModel, ABC):
             return None
     
     @classmethod
-    def get_all(cls: Type[T], limit: Optional[int] = None, offset: int = 0) -> List[T]:
-        """查询所有记录"""
+    def get_all(cls: Type[T], limit: Optional[int] = None, offset: int = 0,
+               order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC') -> List[T]:
+        """
+        查询所有记录，支持排序和分页
+
+        Args:
+            limit: 返回记录数限制（可选）
+            offset: 起始偏移量，默认为0
+            order_by: 排序字段名（可选），如 'id', 'created_at'
+            order: 排序方向，'ASC'（升序）或 'DESC'（降序），默认为 'ASC'
+
+        Returns:
+            所有记录列表
+
+        Example:
+            # 查询所有记录
+            users = User.get_all()
+
+            # 分页查询
+            users = User.get_all(limit=20, offset=10)
+
+            # 按ID升序查询
+            users = User.get_all(order_by='id', order='ASC')
+
+            # 按创建时间降序查询
+            users = User.get_all(order_by='created_at', order='DESC')
+
+            # 分页 + 排序
+            users = User.get_all(limit=20, offset=10, order_by='created_at', order='DESC')
+        """
         try:
             cls._ensure_table_exists()
             db = cls.get_db_connection()
@@ -324,6 +352,11 @@ class BaseDBModel(BaseModel, ABC):
             table_name = cls.get_table_name_with_db()
             sql = f"SELECT * FROM {table_name}"
 
+            # 添加 ORDER BY 子句
+            if order_by is not None:
+                sql += f" ORDER BY `{order_by}` {order}"
+
+            # 添加 LIMIT 和 OFFSET
             if limit is not None:
                 sql += f" LIMIT {offset}, {limit}"
 
@@ -334,10 +367,39 @@ class BaseDBModel(BaseModel, ABC):
             return []
     
     @classmethod
-    def find_by(cls: Type[T], **filters) -> List[T]:
-        """根据条件查询记录"""
+    def find_by(cls: Type[T], limit: Optional[int] = None, offset: int = 0,
+               order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC', **filters) -> List[T]:
+        """
+        根据条件查询记录，支持排序和分页
+
+        Args:
+            limit: 返回记录数限制（可选）
+            offset: 起始偏移量，默认为0
+            order_by: 排序字段名（可选），如 'id', 'created_at'
+            order: 排序方向，'ASC'（升序）或 'DESC'（降序），默认为 'ASC'
+            **filters: 查询条件（键值对）
+
+        Returns:
+            符合条件的记录列表
+
+        Example:
+            # 基本查询
+            users = User.find_by(status='active')
+
+            # 分页查询（从第10条开始，返回20条）
+            users = User.find_by(status='active', limit=20, offset=10)
+
+            # 按ID升序查询
+            users = User.find_by(status='active', order_by='id', order='ASC')
+
+            # 按创建时间降序查询
+            users = User.find_by(status='active', order_by='created_at', order='DESC')
+
+            # 分页 + 排序
+            users = User.find_by(status='active', limit=20, offset=10, order_by='created_at', order='DESC')
+        """
         if not filters:
-            return cls.get_all()
+            return cls.get_all(limit=limit, offset=offset, order_by=order_by, order=order)
 
         try:
             cls._ensure_table_exists()
@@ -354,16 +416,45 @@ class BaseDBModel(BaseModel, ABC):
                 params.append(value)
 
             sql = f"SELECT * FROM {table_name} WHERE {' AND '.join(where_clauses)}"
+
+            # 添加 ORDER BY 子句
+            if order_by is not None:
+                sql += f" ORDER BY `{order_by}` {order}"
+
+            # 添加 LIMIT 和 OFFSET
+            if limit is not None:
+                sql += f" LIMIT {offset}, {limit}"
+
             results = db.execute(sql, tuple(params))
             return [cls(**row) for row in results]
         except Exception as e:
-            logger.error(f"{cls.__name__}.find_by({filters}) 失败：{str(e)}")
+            logger.error(f"{cls.__name__}.find_by({filters}, limit={limit}, offset={offset}, order_by={order_by}, order={order}) 失败：{str(e)}")
             return []
     
     @classmethod
-    def find_one_by(cls: Type[T], **filters) -> Optional[T]:
-        """根据条件查询单条记录"""
-        results = cls.find_by(**filters)
+    def find_one_by(cls: Type[T], order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC', **filters) -> Optional[T]:
+        """
+        根据条件查询单条记录（只返回第一条）
+
+        Args:
+            order_by: 排序字段名（可选），如 'id', 'created_at'
+            order: 排序方向，'ASC'（升序）或 'DESC'（降序），默认为 'ASC'
+            **filters: 查询条件（键值对）
+
+        Returns:
+            第一条匹配的记录，未找到返回 None
+
+        Example:
+            # 查询单条记录
+            user = User.find_one_by(email='test@example.com')
+
+            # 按ID升序查询单条记录
+            user = User.find_one_by(email='test@example.com', order_by='id', order='ASC')
+
+            # 按创建时间降序查询单条记录
+            user = User.find_one_by(status='active', order_by='created_at', order='DESC')
+        """
+        results = cls.find_by(limit=1, order_by=order_by, order=order, **filters)
         return results[0] if results else None
     
     def save(self) -> int:
