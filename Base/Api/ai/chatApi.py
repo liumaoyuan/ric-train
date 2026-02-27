@@ -39,7 +39,7 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True):
             rewrite_question = ''
             # 创建会话记录
             llm = get_default_qwen_llm()
-            session = BaseLLMSession.get_or_create_session(params.user_id, params.session_id)
+            session = BaseLLMSession.get_user_last_session(params.user_id, params.session_id)
             conversation = params.to_log_instance()
             conversation.ai_model = llm.model_name
             conversation.source = "base_chat_api"
