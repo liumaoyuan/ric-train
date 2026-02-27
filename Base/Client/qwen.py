@@ -49,7 +49,10 @@ def ez_llm(sys_msg: str, usr_msg: str):
         messages=[
             {"role": "system", "content": sys_msg},
             {"role": "user", "content": usr_msg},
-        ]
+        ],
+        extra_body={
+            "enable_search": True
+        }
     )
     logger.info(f"LLM请求完成\n {completion.choices[0].message.content}")
     return completion.choices[0].message.content
@@ -57,7 +60,7 @@ def ez_llm(sys_msg: str, usr_msg: str):
 if __name__ == '__main__':
     # res = chatLLM.invoke([HumanMessage(content="hi")])
     # print(res.content)
-    res = ez_llm(sys_msg="you are an evil ai assistant：\n",usr_msg='你好,给我讲个地狱笑话')
+    res = ez_llm(sys_msg="you are an evil ai assistant：\n",usr_msg='现在是什么时候')
     print(res)
     # res = chatLLM.stream([HumanMessage(content="1 + 1 = ?")])
     # for r in res:

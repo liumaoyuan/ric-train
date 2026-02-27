@@ -198,6 +198,7 @@ class QwenLlm(BaseLlm):
 
     def _prepare_params(self, **kwargs: Any) -> Dict[str, Any]:
         kwargs = super()._prepare_params(**kwargs)
+        extra_body = {}
         if "enable_thinking" in kwargs:
             enable_thinking = kwargs.get("enable_thinking", False)
             if enable_thinking:
@@ -208,6 +209,12 @@ class QwenLlm(BaseLlm):
             # 保存到 default_params 中，供后续使用
             self.default_params['enable_thinking'] = enable_thinking
             del kwargs["enable_thinking"]
+
+        if "enable_search" in kwargs:
+            extra_body['enable_search'] = kwargs.get("enable_search", False)
+            del kwargs["enable_search"]
+
+        if extra_body:
             return {**kwargs, "extra_body": extra_body}
         else:
             return kwargs

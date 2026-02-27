@@ -4,6 +4,8 @@ from contextlib import contextmanager
 import logging
 from urllib.parse import quote_plus
 
+from pymysql.err import OperationalError
+
 logger = logging.getLogger(__name__)
 
 
@@ -206,6 +208,11 @@ class BaseConnection(ABC):
                     else:
                         logger.debug(f"未提交事务，影响行数: {affected}")
                     return affected
+        except OperationalError as oe:
+            if oe.args[0] == 1050:
+                logger.debug(f"表已存在，跳过创建表：{oe}")
+                # 表已存在  忽略
+                return 0
         except Exception as e:
             logger.warning(f"SQL 执行失败，标记连接为不可用：{e}")
             self._is_available = False
@@ -217,7 +224,7 @@ class BaseConnection(ABC):
             elif operation_type == OperationType.INSERT:
                 return -1
             else:  # UPDATE, DELETE, EXECUTE
-                return 0
+                return -1
         finally:
             conn.close()
 

@@ -1,28 +1,30 @@
 import json
 import time
-from typing import Optional, Any, Generator
 from functools import wraps
+from typing import Optional, Any
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from pyexpat.errors import messages
 
 from Base.Ai.base import UserMessages
 from Base.Ai.base.baseEnum import LLMTypeEnum
 from Base.Ai.llms.qwenLlm import get_default_qwen_llm
 from Base.Models.BaseLLMConversationModel import BaseLLMConversationModel
+from Base.Models.BaseLLMSession import BaseLLMSession
 from Base.RicUtils.httpUtils import HttpResponse
 from Base.Service.MemoryV1Service import MemoryV1Service
+from Base.Service.aiService import AiService
 from Base.Service.llmConversationService import save_conversation_from_db_2_vdb
 
 
-def persist_conversation(auto_save_vdb: bool = True):
+def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True):
     """
     装饰器：自动持久化对话记录
 
     Args:
         auto_save_vdb: 是否自动保存到向量数据库
+        is_rewriting: 是否问题改写
     """
 
     def decorator(func):
@@ -34,19 +36,24 @@ def persist_conversation(auto_save_vdb: bool = True):
             if not params:
                 return func(*args, **kwargs)
 
-
-
+            rewrite_question = ''
             # 创建会话记录
             llm = get_default_qwen_llm()
-            context = MemoryV1Service.get_simple_memory(
-                question=params.question,
-                user_id=params.user_id,
-                session_id=params.session_id
-            )
-            kwargs.get('params').messages = context + [UserMessages(prompt=params.question)]
+            session = BaseLLMSession.get_or_create_session(params.user_id, params.session_id)
             conversation = params.to_log_instance()
             conversation.ai_model = llm.model_name
             conversation.source = "base_chat_api"
+            conversation.session_id = session.session_uuid
+            if is_rewriting:
+                rewrite_question = AiService.rewrite_question(question=params.question, user_id=params.user_id,
+                                                              session_id=params.session_id)
+                conversation.rewrite_question = rewrite_question
+            context = MemoryV1Service.get_simple_memory(
+                question=rewrite_question or params.question,
+                user_id=params.user_id,
+                session_id=session.session_uuid or params.session_id
+            )
+            kwargs.get('params').messages = context + [UserMessages(prompt=params.question)]
             conversation.context = str(context)
 
             # 记录开始时间
@@ -168,6 +175,7 @@ class ChatParams(BaseModel):
     session_id: Optional[str] = Field(None, description="会话标识")
     is_stream: bool = Field(False, description="是否流式输出")
     is_thinking: bool = Field(False, description="是否思考")
+    is_online_search: bool = Field(False, description="是否在线搜索")
     invoke_params: Optional[dict] = Field({}, description="调用参数")
     messages: Optional[list] = Field(None, description="消息列表")
 
@@ -208,13 +216,14 @@ def chat(params: ChatParams):
         stream = llm.chat(
             messages=full_messages,
             enable_thinking=params.is_thinking,
+            enable_search=params.is_online_search,
             stream=True,
             **params.invoke_params
         )
         return StreamingResponse(stream, media_type="text/event-stream")
     else:
         # 非流式输出
-        result = llm.chat(messages=full_messages, **params.invoke_params)
+        result = llm.chat(messages=full_messages, enable_search=params.is_online_search, **params.invoke_params)
         return HttpResponse.ok(result)
 
 

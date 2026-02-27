@@ -70,7 +70,7 @@ class BaseLLMConversationModel(BaseModuleDBModel):
     created_at: Optional[datetime] = Field(None, description="创建时间")
 
     def to_messages(self, is_rewrite=False):
-        return [UserMessages(prompt=self.question if not is_rewrite else self.rewrite_question or self.question), AssistantMessages(prompt=self.answer[:100] + '...')]
+        return [UserMessages(prompt=self.question if not is_rewrite else self.rewrite_question or self.question), AssistantMessages(prompt=self.answer[:100] if self.answer else self.error_msg + '...')]
 
 
     @property
@@ -112,6 +112,16 @@ class BaseLLMConversationModel(BaseModuleDBModel):
         return context
 
     @staticmethod
+    def get_after_id(last_id: int,session_id: str, user_id: str):
+        """
+        获取 大于 某个ID  之后的 近50 条
+        """
+        db = BaseLLMConversationModel.get_db_connection()
+        sql = f"SELECT * FROM {BaseLLMConversationModel.table_alias} WHERE id > %s and session_id = %s and user_id = %s ORDER BY id ASC LIMIT 50"
+        params = (last_id, session_id, user_id)
+        return db.execute(sql, params)
+
+    @staticmethod
     def db_res_2_messages(context: list, is_rewrite=False):
         """
         DB 检索的会话结果 转换为 messages
@@ -121,4 +131,5 @@ class BaseLLMConversationModel(BaseModuleDBModel):
         return [item for sublist in res for item in sublist]
 
 if __name__ == '__main__':
-    BaseLLMConversationModel.create_table()
+    res1 = BaseLLMConversationModel.get_after_id(10,'string','string')
+    print(res1)
