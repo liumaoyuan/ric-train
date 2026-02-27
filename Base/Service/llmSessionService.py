@@ -14,7 +14,7 @@ def ai_summary_session(session_id: str, user_id: str):
     """
     session = BaseLLMSession.get_user_last_session(user_id, session_id)
     conversations = BaseLLMConversationModel.get_after_id(session.last_handle_id, session_id, user_id)
-    qa_pairs = [{'question': i.get('question'), 'answer': i.get('answer')[:300]} for i in conversations]
+    qa_pairs = [{'question': i.get('question'), 'answer': i.get('answer','')[:300] if i.get('answer') else ''} for i in conversations if isinstance(i, dict)]
 
     if conversations:
         prompt = jinja2_prompt_render(session_summary_prompt_v1,{"history": qa_pairs,"last_session": session.ai_summary})
@@ -29,6 +29,16 @@ def ai_summary_session(session_id: str, user_id: str):
     return ''
 
 
+def ai_summary_4_all_session():
+    """
+    AI生成 所有会话总结
+    """
+    sessions = BaseLLMSession.find_by()
+    for i in sessions:
+        if isinstance(i, BaseLLMSession):
+            ai_summary_session(i.session_uuid, i.user_id)
+
+
 
 if __name__ == '__main__':
-    print(ai_summary_session("string", "string"))
+    ai_summary_4_all_session()
