@@ -784,7 +784,7 @@ class BaseVDBModel(BaseModel, ABC):
 
     @classmethod
     def search(cls,
-               data: list[float],
+               data: list[float] | list[str],
                anns_field: str = None,
                limit: int = 10,
                search_params: dict = None,

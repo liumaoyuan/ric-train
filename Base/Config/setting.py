@@ -140,7 +140,7 @@ class EmailSettings(BaseEnvSettings):
 # LLM Basic
 # =========================
 class LLMSettings(BaseEnvSettings):
-    timeout: float = 30.0
+    timeout: float = 300.0
 
     model_config = SettingsConfigDict(
         env_prefix="LLM_",

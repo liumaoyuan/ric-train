@@ -212,6 +212,16 @@ class RedisClient:
             return False
 
 
+    def clear_all(self):
+        """
+        清空所有键。
+        """
+        try:
+            self.client.flushdb()
+        except redis.RedisError as e:
+            logger.error(f"清空 Redis 失败: {e}")
+
+
 redis_client = RedisClient()
 
 # --- 使用示例 ---
@@ -229,27 +239,27 @@ if __name__ == "__main__":
         print("Redis 连接成功！")
 
         # 基本操作
-        redis_client1.set("name", "Alice", ex=3600)
-        print("获取 name:", redis_client1.get("name"))
-
-        redis_client1.update("name", "Bob")
-        print("更新后 name:", redis_client1.get("name"))
-
-        # 模糊查询 (谨慎使用)
-        print("所有键:", redis_client1.keys("*"))
-        print("以 'name' 开头的键:", redis_client1.keys("name*"))
-
-        # 使用推荐的 SCAN 方式进行模糊查询
-        print("使用 SCAN 查询以 'name' 开头的键:")
-        for key in redis_client1.scan_keys_generator("name*"):
-            print(f"  - {key}")
+        # redis_client1.set("name", "Alice", ex=3600)
+        # print("获取 name:", redis_client1.get("name"))
+        #
+        # redis_client1.update("name", "Bob")
+        # print("更新后 name:", redis_client1.get("name"))
+        #
+        # # 模糊查询 (谨慎使用)
+        # print("所有键:", redis_client1.keys("*"))
+        # print("以 'name' 开头的键:", redis_client1.keys("name*"))
+        #
+        # # 使用推荐的 SCAN 方式进行模糊查询
+        # print("使用 SCAN 查询以 'name' 开头的键:")
+        # for key in redis_client1.scan_keys_generator("name*"):
+        #     print(f"  - {key}")
 
         # 模糊删除 (谨慎使用)
         # redis_client1.fuzzy_delete("temp:*")  # 删除所有以 temp: 开头的键
 
         # 安全的模糊删除 (推荐)
-        # deleted = redis_client1.fuzzy_delete_safe("temp:*")
-        # print(f"安全删除了 {deleted} 个键")
+        deleted = redis_client1.fuzzy_delete_safe("*")
+        print(f"安全删除了 {deleted} 个键")
 
         # 删除单个键
         if redis_client1.delete("name"):

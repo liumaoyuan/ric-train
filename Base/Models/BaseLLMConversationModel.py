@@ -107,7 +107,7 @@ class BaseLLMConversationModel(BaseModuleDBModel):
         """
         获取最近 n 轮对话的上下文
         """
-        context = BaseLLMConversationModel.find_by(user_id=user_id, session_id=session_id, limit=n,
+        context = BaseLLMConversationModel.find_by(user_id=user_id, session_id=session_id, limit=n, status='success',
                                                    order_by="created_at", order="DESC")
         return context
 

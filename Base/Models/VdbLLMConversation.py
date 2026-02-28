@@ -1,10 +1,10 @@
 from typing import Optional, List
 
+from pydantic import Field
+
 from Base.Ai.base import UserMessages, AssistantMessages
 from Base.Ai.llms.qwenLlm import get_default_qwen_llm
-from Base.Ai.service.commonService import RewriteQuestionParams
 from Base.Repository.base.baseVDB import BaseVDBModel
-from pydantic import Field
 
 
 class VdbLLMConversation(BaseVDBModel):

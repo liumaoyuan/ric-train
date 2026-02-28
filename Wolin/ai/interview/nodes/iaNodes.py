@@ -204,7 +204,7 @@ def get_ia_node_list():
     工作流 节点列表
     :return:
     """
-    return [['extract_resume', 'audio_handle'],
+    return ['extract_resume','audio_handle' ,
             ['get_report_paragraph1', 'get_qa_pair', 'resume_analysis'],
             ['analysis_end', 'self_evaluation', 'ai_evaluation', 'qa_pairs_analysis',
              'get_report_table_data_json'], 'generate_report']
@@ -249,7 +249,7 @@ if __name__ == '__main__':
         _state.api_params.user_name = '黄立强'
         _state.api_params.receive_email = '2366692214@qq.com'
         _state.api_params.company_name = '南方电网'
-        node_list = [['extract_resume', 'audio_handle'],
+        node_list = ['extract_resume','audio_handle',
                      ['get_report_paragraph1', 'get_qa_pair', 'resume_analysis'],
                      ['analysis_end', 'self_evaluation', 'ai_evaluation', 'qa_pairs_analysis',
                       'get_report_table_data_json'], 'generate_report']

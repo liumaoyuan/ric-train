@@ -14,7 +14,8 @@ from Base.Models.BaseLLMConversationModel import BaseLLMConversationModel
 from Base.Models.BaseLLMSession import BaseLLMSession
 from Base.RicUtils.httpUtils import HttpResponse
 from Base.Service.MemoryV1Service import MemoryV1Service
-from Base.Service.aiService import AiService
+from Base.Service.aiService import AiService, AuditingTextError
+from Base.Service.keywordService import keyword_replace_question
 from Base.Service.llmConversationService import save_conversation_from_db_2_vdb
 
 
@@ -32,137 +33,152 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True):
         def wrapper(*args, **kwargs):
             # 获取参数
             params = kwargs.get('params') or (args[0] if args else None)
-
             if not params:
                 return func(*args, **kwargs)
-
-            rewrite_question = ''
-            # 创建会话记录
-            llm = get_default_qwen_llm()
-            session = BaseLLMSession.get_user_last_session(params.user_id, params.session_id)
-            conversation = params.to_log_instance()
-            conversation.ai_model = llm.model_name
-            conversation.source = "base_chat_api"
-            conversation.session_id = session.session_uuid
-            if is_rewriting:
-                rewrite_question = AiService.rewrite_question(question=params.question, user_id=params.user_id,
-                                                              session_id=params.session_id)
-                conversation.rewrite_question = rewrite_question
-            context = MemoryV1Service.get_simple_memory(
-                question=rewrite_question or params.question,
-                user_id=params.user_id,
-                session_id=session.session_uuid or params.session_id
-            )
-            kwargs.get('params').messages = context + [UserMessages(prompt=params.question)]
-            conversation.context = str(context)
-
             # 记录开始时间
             start_time = time.time()
+            conversation = params.to_log_instance()
+            session = BaseLLMSession.get_user_last_session(params.user_id, params.session_id)
+            conversation.session_id = session.session_uuid
+            llm = get_default_qwen_llm()
+            conversation.ai_model = llm.model_name
+            conversation.source = "base_chat_api"
 
             try:
-                # 执行原始函数
-                result = func(*args, **kwargs)
+                question = keyword_replace_question(params.question)
+                rewrite_question = ''
+                # 创建会话记录
+                # 文本审核
+                auditing_dict = AiService.auditing_text(question)
+                if auditing_dict.get('status') == 0:
+                    conversation.error_msg = auditing_dict.get('reason')
+                    raise AuditingTextError
 
-                # 如果是流式响应，需要特殊处理
-                if params.is_stream:
-                    # 包装流式响应生成器
-                    original_generator = result.body_iterator
 
-                    async def wrapped_generator():
-                        content_parts = []
-                        reasoning_parts = []  # 专门收集思考内容
-                        answer_parts = []  # 专门收集答案内容
-                        try:
-                            # 先完成流式输出
-                            async for chunk in original_generator:
-                                # 根据 chunk 类型进行处理
-                                if isinstance(chunk, dict):
-                                    # 如果是字典类型（Qwen thinking 模式）
-                                    chunk_type = chunk.get('type', 'content')
-                                    chunk_content = chunk.get('content', '')
+                if is_rewriting:
+                    rewrite_question = AiService.rewrite_question(question=question, user_id=params.user_id,
+                                                                  session_id=params.session_id)
+                    conversation.rewrite_question = rewrite_question
+                context = MemoryV1Service.get_simple_memory(
+                    question=rewrite_question or question,
+                    user_id=params.user_id,
+                    session_id=session.session_uuid or params.session_id
+                )
+                kwargs.get('params').messages = context + [UserMessages(prompt=question)]
+                conversation.context = str(context)
 
-                                    # 分别收集不同类型的內容
-                                    if chunk_type == 'reasoning':
-                                        reasoning_parts.append(chunk_content)
-                                    else:  # 'content' 或其他类型
-                                        answer_parts.append(chunk_content)
 
-                                    sse_data = f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-                                    content_parts.append(chunk_content)
-                                    yield sse_data.encode("utf-8")  # 必须是 bytes
 
-                                elif isinstance(chunk, str):
-                                    # 如果是字符串类型（普通流式输出）
-                                    answer_parts.append(chunk)
-                                    content_parts.append(chunk)
-                                    sse_data = f"data: {chunk}\n\n"
-                                    yield sse_data.encode("utf-8")
+                try:
+                    # 执行原始函数
+                    result = func(*args, **kwargs)
 
-                                elif isinstance(chunk, bytes):
-                                    # 如果已经是 bytes 类型
-                                    decoded_chunk = chunk.decode("utf-8", errors="ignore")
-                                    answer_parts.append(decoded_chunk)
-                                    content_parts.append(decoded_chunk)
-                                    yield chunk
-                                else:
-                                    # 其他类型转换为字符串处理
-                                    chunk_str = str(chunk)
-                                    answer_parts.append(chunk_str)
-                                    content_parts.append(chunk_str)
-                                    sse_data = f"data: {chunk_str}\n\n"
-                                    yield sse_data.encode("utf-8")
+                    # 如果是流式响应，需要特殊处理
+                    if params.is_stream:
+                        # 包装流式响应生成器
+                        original_generator = result.body_iterator
 
-                            # 流式输出完全结束后再进行持久化
+                        async def wrapped_generator():
+                            content_parts = []
+                            reasoning_parts = []  # 专门收集思考内容
+                            answer_parts = []  # 专门收集答案内容
                             try:
-                                if params.is_thinking:
-                                    # 思考模式：分别保存思考过程和答案
-                                    full_content = {
-                                        'reasoning': ''.join(reasoning_parts),
-                                        'content': ''.join(answer_parts)
-                                    }
-                                    conversation.answer = json.dumps(full_content, ensure_ascii=False,
-                                                                     separators=(',', ':'))
-                                else:
-                                    # 普通模式：只保存答案
-                                    conversation.answer = ''.join(answer_parts)
+                                # 先完成流式输出
+                                async for chunk in original_generator:
+                                    # 根据 chunk 类型进行处理
+                                    if isinstance(chunk, dict):
+                                        # 如果是字典类型（Qwen thinking 模式）
+                                        chunk_type = chunk.get('type', 'content')
+                                        chunk_content = chunk.get('content', '')
 
-                                conversation.duration_ms = int((time.time() - start_time) * 1000)
-                                conversation.save()
-                                if auto_save_vdb:
-                                    save_conversation_from_db_2_vdb(conversation)
+                                        # 分别收集不同类型的內容
+                                        if chunk_type == 'reasoning':
+                                            reasoning_parts.append(chunk_content)
+                                        else:  # 'content' 或其他类型
+                                            answer_parts.append(chunk_content)
 
-                            except Exception as save_error:
+                                        sse_data = f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                                        content_parts.append(chunk_content)
+                                        yield sse_data.encode("utf-8")  # 必须是 bytes
+
+                                    elif isinstance(chunk, str):
+                                        # 如果是字符串类型（普通流式输出）
+                                        answer_parts.append(chunk)
+                                        content_parts.append(chunk)
+                                        sse_data = f"data: {chunk}\n\n"
+                                        yield sse_data.encode("utf-8")
+
+                                    elif isinstance(chunk, bytes):
+                                        # 如果已经是 bytes 类型
+                                        decoded_chunk = chunk.decode("utf-8", errors="ignore")
+                                        answer_parts.append(decoded_chunk)
+                                        content_parts.append(decoded_chunk)
+                                        yield chunk
+                                    else:
+                                        # 其他类型转换为字符串处理
+                                        chunk_str = str(chunk)
+                                        answer_parts.append(chunk_str)
+                                        content_parts.append(chunk_str)
+                                        sse_data = f"data: {chunk_str}\n\n"
+                                        yield sse_data.encode("utf-8")
+
+                                # 流式输出完全结束后再进行持久化
+                                try:
+                                    if params.is_thinking:
+                                        # 思考模式：分别保存思考过程和答案
+                                        full_content = {
+                                            'reasoning': ''.join(reasoning_parts),
+                                            'content': ''.join(answer_parts)
+                                        }
+                                        conversation.answer = json.dumps(full_content, ensure_ascii=False,
+                                                                         separators=(',', ':'))
+                                    else:
+                                        # 普通模式：只保存答案
+                                        conversation.answer = ''.join(answer_parts)
+
+                                    conversation.duration_ms = int((time.time() - start_time) * 1000)
+                                    conversation.save()
+                                    if auto_save_vdb:
+                                        save_conversation_from_db_2_vdb(conversation)
+
+                                except Exception as save_error:
+                                    logger = __import__('logging').getLogger(__name__)
+                                    logger.error(f"流式结束后保存对话记录失败：{str(save_error)}")
+                                    # 持久化异常不影响流式输出
+                                    pass
+
+                            except Exception as e:
                                 logger = __import__('logging').getLogger(__name__)
-                                logger.error(f"流式结束后保存对话记录失败：{str(save_error)}")
-                                # 持久化异常不影响流式输出
-                                pass
+                                logger.error(f"流式处理异常：{str(e)}")
+                                raise
 
-                        except Exception as e:
-                            logger = __import__('logging').getLogger(__name__)
-                            logger.error(f"流式处理异常：{str(e)}")
-                            raise
+                        # 创建新的 StreamingResponse
+                        result.body_iterator = wrapped_generator()
+                        return result
+                    else:
+                        result_str = result.data if isinstance(result, HttpResponse) else result
+                        # 非流式响应直接保存
+                        conversation.answer = result_str if isinstance(result_str, str) else str(result_str)
+                        conversation.duration_ms = int((time.time() - start_time) * 1000)
+                        conversation.save()
+                        if auto_save_vdb:
+                            save_conversation_from_db_2_vdb(conversation)
+                        return result
 
-                    # 创建新的 StreamingResponse
-                    result.body_iterator = wrapped_generator()
-                    return result
-                else:
-                    result_str = result.data if isinstance(result, HttpResponse) else result
-                    # 非流式响应直接保存
-                    conversation.answer = result_str if isinstance(result_str, str) else str(result_str)
+                except Exception as e:
+                    # 异常时也记录错误信息
+                    conversation.status = 'failed'
+                    conversation.error_msg = str(e)
                     conversation.duration_ms = int((time.time() - start_time) * 1000)
                     conversation.save()
-                    if auto_save_vdb:
-                        save_conversation_from_db_2_vdb(conversation)
-                    return result
+                    raise
 
-            except Exception as e:
-                # 异常时也记录错误信息
+            except AuditingTextError:
                 conversation.status = 'failed'
-                conversation.error_msg = str(e)
                 conversation.duration_ms = int((time.time() - start_time) * 1000)
                 conversation.save()
-                raise
-
+                return HttpResponse.error(
+                    msg='根据中华人民共和国《生成式人工智能服务管理暂行办法》,您的问题涉嫌包含敏感信息，我将无法处理您的请求')
         return wrapper
 
     return decorator
