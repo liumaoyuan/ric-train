@@ -185,29 +185,7 @@ class BaseParamsModel(BaseModuleDBModel):
 
 
 if __name__ == '__main__':
-    # subjects = 'math|english|physics|chemistry|biology|history|geography|politics'
-    # subject_names = {
-    #     'math': '数学',
-    #     'english': '英语',
-    #     'physics': '物理',
-    #     'chemistry': '化学',
-    #     'biology': '生物',
-    #     'history': '历史',
-    #     'geography': '地理',
-    #     'politics': '政治'
-    # }
-    #
-    # # 遍历所有学科并插入
-    # for subject in subjects.split('|'):
-    #     params = BaseParamsModel(
-    #         code=f'subject_{subject}',
-    #         value=subject,
-    #         desc=f'教育项目-学科类别-{subject_names[subject]}',
-    #         parent_code='edu_subject',
-    #         type='Education',
-    #     )
-    #     params.save()
-    #     print(f"✓ 插入成功: {subject_names[subject]} ({subject})")
+
 
     print("\n=== 测试查询函数 ===")
 

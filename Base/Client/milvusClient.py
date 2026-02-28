@@ -23,6 +23,7 @@ class MilvusClientSingleton:
         if cls._instance is None:
             cls._instance = super(MilvusClientSingleton, cls).__new__(cls)
             cls._instance._initialize()
+            logger.info("✅ MilvusVDBConnection 初始单例实例化成功")
         return cls._instance
 
     def _initialize(self):

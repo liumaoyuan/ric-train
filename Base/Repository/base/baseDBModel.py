@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar
+from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar, Literal
 from abc import ABC, abstractproperty
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -49,12 +49,12 @@ class BaseDBModel(BaseModel, ABC):
         # 删除
         user.delete()
     """
-    
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         from_attributes=True
     )
-    
+
     # 类变量：表名别名（可选）
     table_alias: ClassVar[Optional[str]] = None
     # 类变量：手动声明的建表 SQL（可选，如果声明则优先使用）
@@ -67,15 +67,15 @@ class BaseDBModel(BaseModel, ABC):
     _instance_db_connection: Optional[BaseConnection] = None
     # 类变量：表检查缓存（避免重复检查）
     _table_checked: ClassVar[bool] = False
-    
+
     # 抽象属性：主键字段（子类可以覆盖此属性以自定义类型或描述）
     # 注意：id 字段在基类中已定义，子类可以覆盖此字段以自定义类型或验证规则
     id: Optional[int] = Field(None, description="主键ID", exclude=True)
-    
+
     def __init_subclass__(cls, **kwargs):
         """子类初始化时调用，用于验证子类是否满足要求"""
         super().__init_subclass__(**kwargs)
-        
+
         # 检查子类是否包含 id 字段（继承或重新定义都可以）
         # 注意：因为基类已经定义了 id 字段，子类会自动继承
         # 这个检查主要确保子类不会意外排除 id 字段
@@ -86,7 +86,7 @@ class BaseDBModel(BaseModel, ABC):
                 f"请在子类中定义：id: Optional[int] = Field(..., description='主键描述')\n"
                 f"或者确保没有通过 model_config 或其他方式排除 id 字段。"
             )
-        
+
         # 检查 id 字段是否被意外标记为 required（应该是 Optional）
         id_field = cls.model_fields['id']
         if not id_field.is_required():
@@ -96,51 +96,54 @@ class BaseDBModel(BaseModel, ABC):
                 f"子类 {cls.__name__} 的 id 字段被标记为必填字段（is_required=True）。\n"
                 f"建议：id 字段应该是 Optional[int] 类型，以便在插入新记录时可以自动生成。"
             )
-    
+
     @classmethod
     def set_default_db_connection(cls, db_connection: BaseConnection):
         """设置全局默认数据库连接（所有模型类的默认连接）"""
         cls._default_db_connection = db_connection
         logger.debug(f"设置全局默认数据库连接")
-    
+
     @classmethod
     def set_db_connection(cls, db_connection: BaseConnection):
         """为特定模型类设置数据库连接（覆盖默认连接）"""
         cls._db_connection = db_connection
         logger.debug(f"为 {cls.__name__} 设置数据库连接")
-    
+
     def set_connection(self, db_connection: BaseConnection):
         """为实例设置数据库连接（支持读写分离等场景，优先级最高）"""
         self._instance_db_connection = db_connection
         logger.debug(f"为 {self.__class__.__name__} 实例设置数据库连接")
-    
+
     def get_connection(self) -> Optional[BaseConnection]:
         """获取数据库连接（优先级：实例 > 类 > 默认），如果未设置则返回 None"""
         # 优先级1：实例级别的连接
         if self._instance_db_connection is not None:
             # 检查连接是否可用
-            if hasattr(self._instance_db_connection, 'is_available') and not self._instance_db_connection.is_available():
+            if hasattr(self._instance_db_connection,
+                       'is_available') and not self._instance_db_connection.is_available():
                 logger.debug(f"实例级别的数据库连接不可用，操作将被跳过")
                 return None
             return self._instance_db_connection
         # 优先级2：类级别的连接
         if self.__class__._db_connection is not None:
             # 检查连接是否可用
-            if hasattr(self.__class__._db_connection, 'is_available') and not self.__class__._db_connection.is_available():
+            if hasattr(self.__class__._db_connection,
+                       'is_available') and not self.__class__._db_connection.is_available():
                 logger.debug(f"类级别的数据库连接不可用，操作将被跳过")
                 return None
             return self.__class__._db_connection
         # 优先级3：全局默认连接
         if self.__class__._default_db_connection is not None:
             # 检查连接是否可用
-            if hasattr(self.__class__._default_db_connection, 'is_available') and not self.__class__._default_db_connection.is_available():
+            if hasattr(self.__class__._default_db_connection,
+                       'is_available') and not self.__class__._default_db_connection.is_available():
                 logger.debug(f"全局默认数据库连接不可用，操作将被跳过")
                 return None
             return self.__class__._default_db_connection
         # 返回 None 而不是抛出异常
         logger.warning(f"数据库连接未设置，操作将被跳过")
         return None
-    
+
     @classmethod
     def get_db_connection(cls) -> Optional[BaseConnection]:
         """获取数据库连接（类方法，用于类级别的操作），如果未设置则返回 None"""
@@ -159,7 +162,7 @@ class BaseDBModel(BaseModel, ABC):
         # 返回 None 而不是抛出异常
         logger.warning(f"数据库连接未设置，操作将被跳过")
         return None
-    
+
     @classmethod
     def get_table_name(cls) -> str:
         """获取表名，优先使用 table_alias，否则使用类名小写"""
@@ -183,7 +186,7 @@ class BaseDBModel(BaseModel, ABC):
         else:
             # 如果没有配置数据库名，则只返回表名
             return f"`{cls.get_table_name()}`"
-    
+
     @classmethod
     def table_exists(cls) -> bool:
         """
@@ -194,28 +197,30 @@ class BaseDBModel(BaseModel, ABC):
         if db is None:
             logger.warning(f"检查表 {cls.get_table_name()} 是否存在失败：数据库连接未设置")
             return False
-        
+
         table_name = cls.get_table_name()
-        
+
         # 根据数据库类型使用不同的查询方式
         db_type = db.config.get("type", "mysql").lower()
-        
+
         try:
             if db_type == "sqlite":
                 # SQLite 使用 sqlite_master 表
                 sql = """
-                SELECT 1
-                FROM sqlite_master
-                WHERE type = 'table' AND name = %s
-                """
+                      SELECT 1
+                      FROM sqlite_master
+                      WHERE type = 'table'
+                        AND name = %s \
+                      """
                 result = db.execute(sql, (table_name,))
             elif db_type == "postgresql":
                 # PostgreSQL 使用 information_schema
                 sql = """
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_schema = 'public' AND table_name = %s
-                """
+                      SELECT 1
+                      FROM information_schema.tables
+                      WHERE table_schema = 'public'
+                        AND table_name = %s \
+                      """
                 result = db.execute(sql, (table_name,))
             else:
                 # MySQL 使用 information_schema
@@ -224,12 +229,13 @@ class BaseDBModel(BaseModel, ABC):
                     logger.warning(f"检查表 {table_name} 是否存在失败：MySQL 配置中缺少 database 参数")
                     return False
                 sql = """
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_schema = %s AND table_name = %s
-                """
+                      SELECT 1
+                      FROM information_schema.tables
+                      WHERE table_schema = %s
+                        AND table_name = %s \
+                      """
                 result = db.execute(sql, (database, table_name))
-            
+
             return len(result) > 0
         except Exception as e:
             logger.error(f"检查表 {table_name} 是否存在失败：{str(e)}")
@@ -245,7 +251,7 @@ class BaseDBModel(BaseModel, ABC):
         if cls.create_table_sql is None:
             logger.warning(f"类 {cls.__name__} 未定义 create_table_sql，无法创建表")
             return None
-        
+
         # 替换表名占位符（如果有）
         table_name = cls.get_table_name()
         return cls.create_table_sql.replace("{{table_name}}", table_name)
@@ -257,15 +263,20 @@ class BaseDBModel(BaseModel, ABC):
         if db is None:
             logger.warning(f"创建表 {cls.get_table_name()} 失败：数据库连接未设置")
             return False
-        
+
         sql = cls.get_create_table_sql()
         if sql is None:
             return False
-        
+
         try:
-            db.execute(sql, commit=True)
-            logger.info(f"表 {cls.get_table_name()} 创建成功")
-            return True
+            res = db.execute(sql, commit=True)
+            if res >= 0:
+                logger.info(f"表 {cls.get_table_name()} 创建成功")
+                return True
+            else:
+                logger.error(f"表 {cls.get_table_name()} 创建失败")
+                return False
+
         except Exception as e:
             logger.error(f"创建表 {cls.get_table_name()} 失败：{str(e)}")
             return False
@@ -279,7 +290,7 @@ class BaseDBModel(BaseModel, ABC):
         # 如果已经检查过，直接返回
         if cls._table_checked:
             return
-        
+
         # 检查表是否存在
         try:
             if not cls.table_exists():
@@ -287,10 +298,10 @@ class BaseDBModel(BaseModel, ABC):
                 cls.create_table()
         except Exception as e:
             logger.warning(f"检查或创建表 {cls.get_table_name()} 失败：{str(e)}")
-        
+
         # 标记为已检查
         cls._table_checked = True
-    
+
     @classmethod
     def get_by_id(cls: Type[T], id_val: int) -> Optional[T]:
         """根据ID查询记录"""
@@ -311,10 +322,38 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{cls.__name__}.get_by_id({id_val}) 失败：{str(e)}")
             return None
-    
+
     @classmethod
-    def get_all(cls: Type[T], limit: Optional[int] = None, offset: int = 0) -> List[T]:
-        """查询所有记录"""
+    def get_all(cls: Type[T], limit: Optional[int] = None, offset: int = 0,
+                order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC') -> List[T]:
+        """
+        查询所有记录，支持排序和分页
+
+        Args:
+            limit: 返回记录数限制（可选）
+            offset: 起始偏移量，默认为0
+            order_by: 排序字段名（可选），如 'id', 'created_at'
+            order: 排序方向，'ASC'（升序）或 'DESC'（降序），默认为 'ASC'
+
+        Returns:
+            所有记录列表
+
+        Example:
+            # 查询所有记录
+            users = User.get_all()
+
+            # 分页查询
+            users = User.get_all(limit=20, offset=10)
+
+            # 按ID升序查询
+            users = User.get_all(order_by='id', order='ASC')
+
+            # 按创建时间降序查询
+            users = User.get_all(order_by='created_at', order='DESC')
+
+            # 分页 + 排序
+            users = User.get_all(limit=20, offset=10, order_by='created_at', order='DESC')
+        """
         try:
             cls._ensure_table_exists()
             db = cls.get_db_connection()
@@ -324,6 +363,11 @@ class BaseDBModel(BaseModel, ABC):
             table_name = cls.get_table_name_with_db()
             sql = f"SELECT * FROM {table_name}"
 
+            # 添加 ORDER BY 子句
+            if order_by is not None:
+                sql += f" ORDER BY `{order_by}` {order}"
+
+            # 添加 LIMIT 和 OFFSET
             if limit is not None:
                 sql += f" LIMIT {offset}, {limit}"
 
@@ -332,12 +376,41 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{cls.__name__}.get_all() 失败：{str(e)}")
             return []
-    
+
     @classmethod
-    def find_by(cls: Type[T], **filters) -> List[T]:
-        """根据条件查询记录"""
+    def find_by(cls: Type[T], limit: Optional[int] = None, offset: int = 0,
+                order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC', **filters) -> List[T]:
+        """
+        根据条件查询记录，支持排序和分页
+
+        Args:
+            limit: 返回记录数限制（可选）
+            offset: 起始偏移量，默认为0
+            order_by: 排序字段名（可选），如 'id', 'created_at'
+            order: 排序方向，'ASC'（升序）或 'DESC'（降序），默认为 'ASC'
+            **filters: 查询条件（键值对）
+
+        Returns:
+            符合条件的记录列表
+
+        Example:
+            # 基本查询
+            users = User.find_by(status='active')
+
+            # 分页查询（从第10条开始，返回20条）
+            users = User.find_by(status='active', limit=20, offset=10)
+
+            # 按ID升序查询
+            users = User.find_by(status='active', order_by='id', order='ASC')
+
+            # 按创建时间降序查询
+            users = User.find_by(status='active', order_by='created_at', order='DESC')
+
+            # 分页 + 排序
+            users = User.find_by(status='active', limit=20, offset=10, order_by='created_at', order='DESC')
+        """
         if not filters:
-            return cls.get_all()
+            return cls.get_all(limit=limit, offset=offset, order_by=order_by, order=order)
 
         try:
             cls._ensure_table_exists()
@@ -354,18 +427,49 @@ class BaseDBModel(BaseModel, ABC):
                 params.append(value)
 
             sql = f"SELECT * FROM {table_name} WHERE {' AND '.join(where_clauses)}"
+
+            # 添加 ORDER BY 子句
+            if order_by is not None:
+                sql += f" ORDER BY `{order_by}` {order}"
+
+            # 添加 LIMIT 和 OFFSET
+            if limit is not None:
+                sql += f" LIMIT {offset}, {limit}"
+
             results = db.execute(sql, tuple(params))
             return [cls(**row) for row in results]
         except Exception as e:
-            logger.error(f"{cls.__name__}.find_by({filters}) 失败：{str(e)}")
+            logger.error(
+                f"{cls.__name__}.find_by({filters}, limit={limit}, offset={offset}, order_by={order_by}, order={order}) 失败：{str(e)}")
             return []
-    
+
     @classmethod
-    def find_one_by(cls: Type[T], **filters) -> Optional[T]:
-        """根据条件查询单条记录"""
-        results = cls.find_by(**filters)
+    def find_one_by(cls: Type[T], order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC', **filters) -> \
+    Optional[T]:
+        """
+        根据条件查询单条记录（只返回第一条）
+
+        Args:
+            order_by: 排序字段名（可选），如 'id', 'created_at'
+            order: 排序方向，'ASC'（升序）或 'DESC'（降序），默认为 'ASC'
+            **filters: 查询条件（键值对）
+
+        Returns:
+            第一条匹配的记录，未找到返回 None
+
+        Example:
+            # 查询单条记录
+            user = User.find_one_by(email='test@example.com')
+
+            # 按ID升序查询单条记录
+            user = User.find_one_by(email='test@example.com', order_by='id', order='ASC')
+
+            # 按创建时间降序查询单条记录
+            user = User.find_one_by(status='active', order_by='created_at', order='DESC')
+        """
+        results = cls.find_by(limit=1, order_by=order_by, order=order, **filters)
         return results[0] if results else None
-    
+
     def save(self) -> int:
         """保存记录（插入或更新），返回ID"""
         try:
@@ -378,7 +482,7 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{self.__class__.__name__}.save() 失败：{str(e)}")
             return -1
-    
+
     def _insert(self) -> int:
         """插入记录，返回新插入的ID"""
         db = self.get_db_connection()
@@ -407,7 +511,7 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{self.__class__.__name__}._insert() 失败：{str(e)}")
             return -1
-    
+
     def _update(self) -> bool:
         """更新记录，返回是否成功"""
         db = self.get_db_connection()
@@ -433,7 +537,7 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{self.__class__.__name__}._update() 失败：{str(e)}")
             return False
-    
+
     def update(self, **fields) -> bool:
         """更新指定字段"""
         try:
@@ -444,7 +548,7 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{self.__class__.__name__}.update({fields}) 失败：{str(e)}")
             return False
-    
+
     def delete(self) -> bool:
         """删除记录，返回是否成功"""
         if self.id is None:
@@ -465,7 +569,7 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{self.__class__.__name__}.delete() 失败：{str(e)}")
             return False
-    
+
     @classmethod
     def delete_by_id(cls, id_val: int) -> bool:
         """根据ID删除记录"""
@@ -550,7 +654,7 @@ class BaseDBModel(BaseModel, ABC):
 
                 # 构建批量数据
                 for instance in batch:
-                    data = instance.model_dump(exclude_none=True, exclude={'id'})
+                    data = instance.model_dump(exclude_none=False, exclude={'id'})
                     # 按照字段顺序取值
                     row_data = [data.get(field) for field in fields]
                     batch_data.append(row_data)
@@ -564,16 +668,29 @@ class BaseDBModel(BaseModel, ABC):
 
                 # 执行批量插入
                 try:
-                    affected_rows = db.execute(sql, tuple(params), commit=True)
+                    batch_size_actual = len(batch_data)
+                    db.execute(sql, tuple(params), commit=True)
+                    logger.info(f"批量插入SQL执行成功，本批 {batch_size_actual} 条")
 
                     # 获取插入的 ID（MySQL）
                     # 注意：不同数据库获取批量插入 ID 的方式不同
+                    db_config = getattr(db, 'config', {})
+                    logger.debug(f"数据库配置: {db_config}, type类型: {db_config.get('type', 'mysql')}")
+
                     if hasattr(db, 'config') and db.config.get("type", "mysql").lower() == "mysql":
+                        logger.info("检测到MySQL数据库，尝试获取插入ID")
                         # MySQL: 获取最后插入的 ID，批量插入的 ID 是连续的
-                        last_id = db.execute("SELECT LAST_INSERT_ID() as last_id")[0]['last_id']
-                        if affected_rows > 0:
-                            start_id = last_id - affected_rows + 1
-                            all_ids.extend(list(range(start_id, last_id + 1)))
+                        result = db.execute("SELECT LAST_INSERT_ID() as last_id")
+                        logger.info(f"LAST_INSERT_ID() 查询结果: {result}")
+
+                        if result and result[0]:
+                            last_id = int(result[0]['last_id'])
+                            logger.info(f"last_id 值: {last_id}, 类型: {type(last_id)}")
+                            if last_id > 0:
+                                start_id = last_id - batch_size_actual + 1
+                                id_range = list(range(start_id, last_id + 1))
+                                all_ids.extend(id_range)
+                                logger.info(f"成功添加ID到列表: {id_range}, 当前all_ids长度: {len(all_ids)}")
                     else:
                         # 其他数据库：无法准确获取批量插入的 ID，返回空列表
                         logger.warning(
@@ -581,27 +698,26 @@ class BaseDBModel(BaseModel, ABC):
                         )
 
                     logger.info(
-                        f"{cls.__name__}.bulk_insert() 成功：第 {i//batch_size + 1} 批，"
-                        f"插入了 {affected_rows} 条记录"
+                        f"{cls.__name__}.bulk_insert() 成功：第 {i // batch_size + 1} 批，"
+                        f"本批插入 {batch_size_actual} 条记录，累计插入 {len(all_ids) + batch_size_actual} 条"
                     )
 
                 except Exception as e:
                     logger.error(
-                        f"{cls.__name__}.bulk_insert() 批量插入失败（第 {i//batch_size + 1} 批）：{str(e)}"
+                        f"{cls.__name__}.bulk_insert() 批量插入失败（第 {i // batch_size + 1} 批）：{str(e)}"
                     )
                     raise
 
-            logger.info(f"{cls.__name__}.bulk_insert() 成功：总计插入了 {len(all_ids)} 条记录")
             return all_ids
 
         except Exception as e:
             logger.error(f"{cls.__name__}.bulk_insert() 失败：{str(e)}")
             return []
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return self.model_dump()
-    
+
     @classmethod
     def count(cls) -> int:
         """查询记录总数"""

@@ -1,7 +1,9 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from Base.Repository.base.baseVDB import BaseVDBConnection
+from pymilvus import RRFRanker, AnnSearchRequest
+
+from Base.Repository.base.baseVDBConnection import BaseVDBConnection
 from Base.Client.milvusClient import MilvusClientSingleton
 
 logger = logging.getLogger(__name__)
@@ -21,7 +23,7 @@ class MilvusVDBConnection(BaseVDBConnection):
             client: MilvusClient 实例，如果为 None 则使用默认的单例
         """
         self._client = client or MilvusClientSingleton()
-        logger.info("✅ MilvusVDBConnection 初始化成功")
+
 
     @property
     def client(self):
@@ -118,6 +120,30 @@ class MilvusVDBConnection(BaseVDBConnection):
         """描述集合结构"""
         return self.client.describe_collection(collection_name)
 
+    def hybrid_search(
+            self,
+            collection_name: str,
+            reqs: List[Any],
+            limit: int = 5,
+            ranker: Optional[Any] = None,
+            filter: str = "",
+            output_fields: List[str] = None
+    ) -> List:
+        """混合检索（密集向量 + 稀疏向量）"""
+        # 如果没有提供 ranker，使用默认的 RRFRanker
+        if ranker is None:
+            ranker = RRFRanker()
+
+        return self.client.hybrid_search(
+            collection_name=collection_name,
+            reqs=reqs,
+            ranker=ranker,
+            limit=limit,
+            filter=filter,
+            output_fields=output_fields
+        )
+
+
     def change_or_create_database(self, db_name: str):
         """更改或创建数据库"""
         self._client.change_or_create_database(db_name)
@@ -128,7 +154,7 @@ class MilvusVDBConnection(BaseVDBConnection):
         logger.info(f"🔁 已切换到数据库: {db_name}")
 
 
-def get_default_milvus_vdb_connection() -> MilvusVDBConnection:
+def get_default_milvus_vdb_connection() -> BaseVDBConnection:
     """获取默认的 MilvusVDBConnection 实例"""
     return MilvusVDBConnection()
 

@@ -314,7 +314,7 @@ class BaseLlm(ABC):
             raise NotImplementedError(f"{self.model_name}模型不支持ASR")
 
     @abstractmethod
-    def _embedding(self, text: str | list[str], **kwargs: Any) -> List[float] | List[List[float]]:
+    def _embedding(self, text: str | list[str], **kwargs: Any) -> List[List[float]]:
         """
         用于继承
         :param text:
@@ -323,7 +323,7 @@ class BaseLlm(ABC):
         """
         pass
 
-    def embedding(self, text: str | list[str], **kwargs: Any) -> List[float] | List[List[float]]:
+    def embedding(self, text: str | list[str], **kwargs: Any) -> List[List[float]]:
         """
         Embedding 服务支持
         :param text:
