@@ -158,24 +158,27 @@ class QuestionPo(DefaultDbModel):
                           subject: Optional[str] = None,
                           question_type: Optional[str] = None,
                           difficulty_level: Optional[int] = None,
-                          grade: Optional[int] = None) -> Optional['QuestionPo']:
+                          grade: Optional[int] = None,
+                          num: int = 1) -> Optional['QuestionPo'] | List['QuestionPo']:
         """
-        根据条件随机查询一个题目
+        根据条件随机查询题目
 
         Args:
             subject: 科目（可选）
             question_type: 题型（可选）
             difficulty_level: 难度等级 1-5（可选）
             grade: 年级 1-12（可选）
+            num: 题目数量，默认为1（返回单个对象），大于1返回列表
 
         Returns:
-            随机题目对象，未找到返回 None
+            num=1 时返回单个题目对象，未找到返回 None
+            num>1 时返回题目对象列表
         """
         try:
             cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
-                return None
+                return None if num == 1 else []
 
             table_name = cls.get_table_name()
 
@@ -201,16 +204,24 @@ class QuestionPo(DefaultDbModel):
 
             # 构建 SQL
             where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
-            sql = f"SELECT * FROM `{table_name}` WHERE {where_sql} ORDER BY RAND() LIMIT 1"
+            sql = f"SELECT * FROM `{table_name}` WHERE {where_sql} ORDER BY RAND() LIMIT {num}"
 
-            result = db.execute(sql, tuple(params))
-            if result:
-                return cls(**result[0])
-            return None
+            results = db.execute(sql, tuple(params))
+
+            if num == 1:
+                # 返回单个题目对象
+                if results:
+                    return cls(**results[0])
+                return None
+            else:
+                # 返回题目列表
+                if results:
+                    return [cls(**row) for row in results]
+                return []
         except Exception as e:
             logger = __import__('logging').getLogger(__name__)
             logger.error(f"get_random_question 失败：{str(e)}")
-            return None
+            return None if num == 1 else []
 
     @classmethod
     def get_by_id(cls, id_val) -> Optional['QuestionPo']:

@@ -24,7 +24,7 @@ class QuestionService(BaseModel):
     knowledge_points: dict = Field({}, description="知识点字典")
 
     def generate_question_by_prompt(self):
-        # TODO : 根据用户自然语言输入的提示生成题目 ， 如“帮我生成一道困难的高三几何相关的数学题”
+        # TODO : 根据用户自然语言输入的提示生成题目 ， 如"帮我生成一道困难的高三几何相关的数学题"
         #       顺便做成接口
         pass
 
@@ -191,6 +191,58 @@ class QuestionService(BaseModel):
         answer.save()
         return response
 
+    @staticmethod
+    def judge_question(params: AiJudgeQuestionBo):
+        """
+        人工判题
+        """
+        # 获取题目
+        question = QuestionPo.get_by_id(params.question_id)
+        if not question:
+            raise ValueError(f"题目不存在：{params.question_id}")
+
+        true_answer = question.answer
+        user_answer = params.answer
+
+        # 标准化答案：去除首尾空格，转为小写
+        def normalize_answer(answer):
+            if answer is None:
+                return ""
+            if isinstance(answer, (bool, int, float)):
+                return str(answer).lower().strip()
+            return str(answer).lower().strip()
+
+        norm_true = normalize_answer(true_answer)
+        norm_user = normalize_answer(user_answer)
+
+        # 根据题型进行判题
+        score = 0
+        ai_result = ""
+
+        if question.question_type == 'judgement':
+            # 判断题：比较 true/false 字符串
+            is_correct = norm_true == norm_user
+            score = 1 if is_correct else 0
+            ai_result = "✓ 正确" if is_correct else "✗ 错误"
+
+        elif question.question_type in ['single_choice', 'multiple_choice']:
+            # 选择题：比较选项字母
+            # 处理多选题答案（可能是逗号分隔或逗号+空格分隔）
+            norm_true = ','.join(sorted([opt.strip() for opt in norm_true.replace(' ', ',').split(',') if opt.strip()]))
+            norm_user = ','.join(sorted([opt.strip() for opt in norm_user.replace(' ', ',').split(',') if opt.strip()]))
+
+            is_correct = norm_true == norm_user
+            score = 1 if is_correct else 0
+            ai_result = f"✓ 正确" if is_correct else f"✗ 错误。正确答案：{true_answer}"
+
+        else:
+            # 填空题、简答题、论述题：直接字符串比较
+            is_correct = norm_true == norm_user
+            score = 1 if is_correct else 0
+            ai_result = f"✓ 正确" if is_correct else f"✗ 错误。正确答案：{true_answer}"
+
+        return {'score': score, 'ai_result': ai_result}
+
 
 question_service = QuestionService()
 
@@ -201,7 +253,12 @@ def get_question_service():
 
 if __name__ == '__main__':
     question_service = QuestionService()
-    res = question_service.random_generate_question(QuestionRandomBo())
-    # res = question_service.ai_judge_question(
-    #     AiJudgeQuestionBo(question_id=1, user_id='test', answer="B", source='test'))
-    print(res)
+    res = QuestionPo.get_random_question(num=1)
+    # res = question_service.random_generate_question(QuestionRandomBo())
+    # res = question_service.judge_question(
+    #     AiJudgeQuestionBo(question_id=1239, user_id='test', answer="false", source='test'))
+    if isinstance(res, list):
+        for i in res:
+            print(res)
+    else:
+        print(res)

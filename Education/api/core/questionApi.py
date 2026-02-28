@@ -1,12 +1,13 @@
+import concurrent.futures
 import threading
 import uuid
 import io
 import logging
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Response, UploadFile, File
+from fastapi import APIRouter, Response, UploadFile, File, Query
 
 from Base.RicUtils.dataUtils import remove_none
 from Base.RicUtils.excelUtils import dict_list_to_excel, excel_to_dict_list
@@ -22,13 +23,44 @@ router = APIRouter(prefix="/education/question")
 
 
 @router.get("/random_one")
-def get_random_one_question():
+def get_random_one_question(
+    subject: Optional[str] = Query(None, description="科目"),
+    question_type: Optional[str] = Query(None, description="题型"),
+    difficulty_level: Optional[int] = Query(None, description="难度等级 1-5"),
+    grade: Optional[int] = Query(None, description="年级 1-12"),
+    num: Optional[int] = Query(1, description="题目数量，默认1道")
+):
     """
-    随机返回一道题目
+    随机返回题目
+
+    Args:
+        subject: 科目筛选（可选）
+        question_type: 题型筛选（可选）
+        difficulty_level: 难度等级筛选 1-5（可选）
+        grade: 年级筛选 1-12（可选）
+        num: 题目数量，默认1道
+
+    Returns:
+        num=1 时返回单个题目对象，num>1 时返回题目列表
     """
     # todo: 不返回用户已经做过的题目
-    res = QuestionPo.get_random_question()
-    return HttpResponse.ok(res.mini_dict)
+    num = num or 1
+
+    # 一次性查询 num 道题目
+    questions = QuestionPo.get_random_question(
+        subject=subject or 'python',
+        question_type=question_type,
+        difficulty_level=difficulty_level,
+        grade=grade,
+        num=num
+    )
+
+    if num == 1:
+        # 返回单道题目
+        return HttpResponse.ok(questions.mini_dict if questions else None)
+    else:
+        # 返回多道题目
+        return HttpResponse.ok([q.mini_dict for q in questions])
 
 
 @router.post("/random_generate")
@@ -39,14 +71,27 @@ async def generate_random_question(params: QuestionRandomParamVo):
     :return:
     """
 
-    # TODO: 改成多并发执行， 同时启动 多个线程（参数控制）并发生成，加快生成速度
-    def generate_question():
-        for i in range(params.num):
+    # 多线程并发执行，同时启动多个线程并发生成，加快生成速度
+    def generate_single_question(params):
+        """生成单个题目"""
+        try:
             get_question_service().random_generate_question(params)
+        except Exception as e:
+            logger.error(f"生成题目失败：{str(e)}")
 
-    # 额外线程执行
-    threading.Thread(target=generate_question).start()
-    return HttpResponse.ok("正在生成中...")
+    # 使用线程池并发执行
+    max_workers = min(params.num, 20)  # 限制最大并发数
+
+    def generate_questions():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有生成任务
+            futures = [executor.submit(generate_single_question, params) for _ in range(params.num)]
+            # 等待所有任务完成
+            concurrent.futures.wait(futures)
+
+    # 在额外线程中执行
+    threading.Thread(target=generate_questions).start()
+    return HttpResponse.ok(f"正在生成 {params.num} 道题目...")
 
 
 @router.post("/ai_judge")
@@ -55,6 +100,14 @@ async def ai_judge_question(params: AiJudgeQuestionBo):
     AI判题接口
     """
     res = get_question_service().ai_judge_question(params)
+    return HttpResponse.ok(res)
+
+@router.post("/judge")
+async def judge_question(params: AiJudgeQuestionBo):
+    """
+    人工判题接口
+    """
+    res = get_question_service().judge_question(params)
     return HttpResponse.ok(res)
 
 
