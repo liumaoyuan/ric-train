@@ -1,7 +1,7 @@
 import json
 from typing import Literal
 
-from Base.Ai.llms.qwenLlm import get_default_qwen_llm
+from Base.Ai.llms.qwenLlm import get_default_qwen_llm, QwenLlm
 from Base.Ai.prompt.commonPrompt import text_auditing_prompt_v1
 from Base.Ai.service.commonService import RewriteQuestionParams, rewrite_question
 from Base.Ai.utils.common import jinja2_prompt_render
@@ -18,7 +18,7 @@ class AiService:
 
     @staticmethod
     def rewrite_question(question: str, user_id: str, session_id: str):
-        llm = get_default_qwen_llm()
+        llm = QwenLlm()
         question_embedding = llm.embedding(text=question)[0]
         similarity = VdbLLMConversation.search(data=question_embedding, output_fields=['question'])
         history = BaseLLMConversationModel.get_last_n_turns_context(user_id, session_id, 5)
@@ -37,7 +37,7 @@ class AiService:
         {"status": 0, "reason": "包含敏感政治元素【敏感政治人物】"}
         """
         if auditing_type == 'local':
-            llm = get_default_qwen_llm()
+            llm = QwenLlm()
             prompt = jinja2_prompt_render(prompt=text_auditing_prompt_v1, params={'text': text})
             response = llm.invoke(prompt=prompt)
             res_dict = json.loads(response)
