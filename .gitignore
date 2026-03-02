@@ -101,6 +101,7 @@ auto-save-list/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+nul
 
 # =============================
 # 其它常见忽略项
@@ -141,6 +142,10 @@ dmypy.json
 
 # Claude Code
 .claude/
+CLAUDE.md
+
+# Claude Workspace (AI 助手临时生成内容)
+.claude-workspace/
 # =============================
 # 大文件 / 二进制文件 / 模型文件（ML 场景常见）
 # =============================
