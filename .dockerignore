@@ -40,8 +40,9 @@ venv.bak/
 *.swo
 *~
 
-# Claude  Code
+# Claude Code
 .claude/
+.claude-workspace/
 # OS
 .DS_Store
 .DS_Store?
