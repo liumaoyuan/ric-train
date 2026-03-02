@@ -8,7 +8,7 @@ from fastapi import Request, APIRouter
 
 from fastapi import FastAPI
 
-# 定位当前目录作为模板根路径 （如此 需要 .html 文件和当前文件同目录下）
+# 定位当前目录作为模板根路径（如此 需要 .html 文件和当前文件同目录下）
 BASE_DIR = Path(__file__).parent
 
 router = APIRouter(prefix="/edu")
@@ -33,14 +33,29 @@ def frontend_init(app: FastAPI):
         """黄金矿工游戏"""
         return templates.TemplateResponse("goldMiners.html", {"request": request})
 
-    app.include_router(router, tags=["教育局项目-前端"])
+    @router.get("/exam", response_class=HTMLResponse)
+    async def exam_page(request: Request):
+        """在线考试页面"""
+        return templates.TemplateResponse("exam.html", {"request": request})
+
+    @router.get("/exam-result", response_class=HTMLResponse)
+    async def exam_result_page(request: Request):
+        """考试结果页面"""
+        return templates.TemplateResponse("exam_result.html", {"request": request})
+
+    @router.get("/history", response_class=HTMLResponse)
+    async def history_page(request: Request):
+        """考试历史页面"""
+        return templates.TemplateResponse("history.html", {"request": request})
+
+    app.include_router(router, tags=["教育局项目 - 前端"])
 
     # 挂载静态文件目录
     static_dir = BASE_DIR / "static"
     if static_dir.exists():
         app.mount("/education/static", StaticFiles(directory=str(static_dir)), name="education_static")
-        
-        # 单独挂载JavaScript文件目录，便于访问
+
+        # 单独挂载 JavaScript 文件目录，便于访问
         js_dir = static_dir / "js"
         if js_dir.exists():
             app.mount("/education/js", StaticFiles(directory=str(js_dir)), name="education_js")

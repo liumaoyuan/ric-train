@@ -45,8 +45,40 @@ class AnswerPo(DefaultDbModel):
     ai_prompt: Optional[str] = None
     ai_result: Optional[str] = None
     source: Optional[str] = None
-    connection_id: Optional[str] = None
+    connection_id: Optional[str | int] = None
     created_at: datetime = None
+
+
+    @classmethod
+    def get_by_source_and_connection_id(cls, source: str, connection_id: str) -> list:
+        """
+        根据来源和关联 ID 查询答题记录
+
+        Args:
+            source: 来源（exam、practice 等）
+            connection_id: 关联 ID（如考试 ID）
+
+        Returns:
+            答题记录列表
+        """
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                return []
+
+            table_name = cls.get_table_name()
+            sql = f"SELECT * FROM `{table_name}` WHERE `source` = %s AND `connection_id` = %s"
+            results = db.execute(sql, (source, connection_id))
+
+            if not results:
+                return []
+
+            return [cls(**row) for row in results]
+        except Exception as e:
+            logger = __import__('logging').getLogger(__name__)
+            logger.error(f"get_by_source_and_connection_id(source={source}, connection_id={connection_id}) 失败：{str(e)}")
+            return []
 
 
 if __name__ == '__main__':
