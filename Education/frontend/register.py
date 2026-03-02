@@ -28,10 +28,10 @@ def frontend_init(app: FastAPI):
         """答题对战游戏页面"""
         return templates.TemplateResponse("questionGame.html", {"request": request})
 
-    @router.get("/hjkg/game", response_class=HTMLResponse)
-    async def game1_page(request: Request):
-        """黄金矿工游戏"""
-        return templates.TemplateResponse("goldMiners.html", {"request": request})
+    # @router.get("/hjkg/game", response_class=HTMLResponse)
+    # async def game1_page(request: Request):
+    #     """黄金矿工游戏"""
+    #     return templates.TemplateResponse("goldMiners.html", {"request": request})
 
     @router.get("/exam", response_class=HTMLResponse)
     async def exam_page(request: Request):
@@ -48,6 +48,16 @@ def frontend_init(app: FastAPI):
         """考试历史页面"""
         return templates.TemplateResponse("history.html", {"request": request})
 
+    @router.get("/paper-manager", response_class=HTMLResponse)
+    async def paper_manager_page(request: Request):
+        """试卷管理页面"""
+        return templates.TemplateResponse("paper_manager.html", {"request": request})
+
+    @router.get("/question-manager", response_class=HTMLResponse)
+    async def question_manager_page(request: Request):
+        """题目管理页面"""
+        return templates.TemplateResponse("question_manager.html", {"request": request})
+
     app.include_router(router, tags=["教育局项目 - 前端"])
 
     # 挂载静态文件目录
@@ -55,7 +65,7 @@ def frontend_init(app: FastAPI):
     if static_dir.exists():
         app.mount("/education/static", StaticFiles(directory=str(static_dir)), name="education_static")
 
-        # 单独挂载 JavaScript 文件目录，便于访问
-        js_dir = static_dir / "js"
-        if js_dir.exists():
-            app.mount("/education/js", StaticFiles(directory=str(js_dir)), name="education_js")
+        # # 单独挂载 JavaScript 文件目录，便于访问
+        # js_dir = static_dir / "js"
+        # if js_dir.exists():
+        #     app.mount("/education/js", StaticFiles(directory=str(js_dir)), name="education_js")

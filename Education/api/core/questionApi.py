@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Response, UploadFile, File, Query
+from fastapi import APIRouter, Response, UploadFile, File, Query, Form
 
 from Base.RicUtils.dataUtils import remove_none
 from Base.RicUtils.excelUtils import dict_list_to_excel, excel_to_dict_list
@@ -20,6 +20,22 @@ from Education.services.questionService import get_question_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/education/question")
+
+
+@router.get("/subjects")
+def get_subjects():
+    """
+    获取科目列表
+
+    Returns:
+        科目列表
+    """
+    try:
+        subjects = get_question_service().get_subjects()
+        return HttpResponse.ok(subjects)
+    except Exception as e:
+        logger.error(f"获取科目列表失败：{str(e)}")
+        return HttpResponse.error(f"获取科目列表失败：{str(e)}")
 
 
 @router.get("/random_one")
@@ -300,3 +316,222 @@ async def excel_import_question(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"导入题目失败：{str(e)}")
         return HttpResponse.error(f"导入失败：{str(e)}")
+
+
+@router.get("/search")
+def search_questions(
+    keyword: Optional[str] = Query(None, description="关键词"),
+    subject: Optional[str] = Query(None, description="科目"),
+    question_type: Optional[str] = Query(None, description="题型"),
+    grade: Optional[int] = Query(None, description="年级"),
+    difficulty_level: Optional[int] = Query(None, description="难度等级"),
+    page: Optional[int] = Query(1, description="页码"),
+    page_size: Optional[int] = Query(10, description="每页数量")
+):
+    """
+    搜索题目
+
+    Args:
+        keyword: 关键词（搜索题干）
+        subject: 科目
+        question_type: 题型
+        grade: 年级
+        difficulty_level: 难度等级
+        page: 页码
+        page_size: 每页数量
+
+    Returns:
+        分页结果
+    """
+    try:
+        result = QuestionPo.search(
+            keyword=keyword,
+            subject=subject,
+            question_type=question_type,
+            grade=grade,
+            difficulty_level=difficulty_level,
+            page=page or 1,
+            page_size=page_size or 10
+        )
+        return HttpResponse.ok(result)
+    except Exception as e:
+        logger.error(f"搜索题目失败：{str(e)}")
+        return HttpResponse.error(f"搜索题目失败：{str(e)}")
+
+
+@router.get("/{question_id}")
+def get_question_detail(question_id: int):
+    """
+    获取题目详情
+
+    Args:
+        question_id: 题目 ID
+
+    Returns:
+        题目详情
+    """
+    try:
+        question = QuestionPo.get_by_id(question_id)
+        if not question:
+            return HttpResponse.error("题目不存在")
+        return HttpResponse.ok(question.model_dump())
+    except Exception as e:
+        logger.error(f"获取题目详情失败：{str(e)}")
+        return HttpResponse.error(f"获取题目详情失败：{str(e)}")
+
+
+@router.post("")
+def create_question(
+    question_text: str = Form(..., description="题干"),
+    question_html: Optional[str] = Form(None, description="题干 HTML"),
+    question_markdown: Optional[str] = Form(None, description="题干 Markdown"),
+    answer: str = Form(..., description="标准答案"),
+    analysis: Optional[str] = Form(None, description="题目解析"),
+    hint: Optional[str] = Form(None, description="解题提示"),
+    knowledge_points: Optional[str] = Form(None, description="知识点"),
+    grade: int = Form(..., description="年级"),
+    subject: str = Form(..., description="科目"),
+    question_type: str = Form(..., description="题型"),
+    difficulty_level: Optional[int] = Form(3, description="难度等级"),
+    difficulty_label: Optional[str] = Form(None, description="难度标签"),
+    created_by: Optional[int] = Form(505, description="创建者 ID")
+):
+    """
+    创建题目
+
+    Args:
+        question_text: 题干
+        answer: 标准答案
+        analysis: 题目解析
+        hint: 解题提示
+        knowledge_points: 知识点
+        grade: 年级
+        subject: 科目
+        question_type: 题型
+        difficulty_level: 难度等级
+        created_by: 创建者 ID
+
+    Returns:
+        创建的题目信息
+    """
+    try:
+        question = QuestionPo(
+            question_uuid=str(uuid.uuid4()),
+            question_text=question_text,
+            question_html=question_html,
+            question_markdown=question_markdown,
+            answer=answer,
+            analysis=analysis,
+            hint=hint,
+            knowledge_points=knowledge_points,
+            grade=grade,
+            subject=subject,
+            question_type=question_type,
+            difficulty_level=difficulty_level,
+            difficulty_label=difficulty_label,
+            created_by=created_by or 505,
+            status=0
+        )
+        question.save()
+
+        return HttpResponse.ok({
+            'id': question.id,
+            'question_uuid': question.question_uuid,
+            'message': '题目创建成功'
+        })
+    except Exception as e:
+        logger.error(f"创建题目失败：{str(e)}")
+        return HttpResponse.error(f"创建题目失败：{str(e)}")
+
+
+@router.put("/{question_id}")
+def update_question(
+    question_id: int,
+    question_text: str = Form(..., description="题干"),
+    question_html: Optional[str] = Form(None, description="题干 HTML"),
+    question_markdown: Optional[str] = Form(None, description="题干 Markdown"),
+    answer: str = Form(..., description="标准答案"),
+    analysis: Optional[str] = Form(None, description="题目解析"),
+    hint: Optional[str] = Form(None, description="解题提示"),
+    knowledge_points: Optional[str] = Form(None, description="知识点"),
+    grade: int = Form(..., description="年级"),
+    subject: str = Form(..., description="科目"),
+    question_type: str = Form(..., description="题型"),
+    difficulty_level: Optional[int] = Form(3, description="难度等级"),
+    difficulty_label: Optional[str] = Form(None, description="难度标签"),
+    updated_by: Optional[int] = Form(505, description="更新者 ID")
+):
+    """
+    更新题目
+
+    Args:
+        question_id: 题目 ID
+        question_text: 题干
+        answer: 标准答案
+        analysis: 题目解析
+        hint: 解题提示
+        knowledge_points: 知识点
+        grade: 年级
+        subject: 科目
+        question_type: 题型
+        difficulty_level: 难度等级
+        updated_by: 更新者 ID
+
+    Returns:
+        更新后的题目信息
+    """
+    try:
+        question = QuestionPo.get_by_id(question_id)
+        if not question:
+            return HttpResponse.error("题目不存在")
+
+        # 更新字段
+        question.question_text = question_text
+        question.question_html = question_html
+        question.question_markdown = question_markdown
+        question.answer = answer
+        question.analysis = analysis
+        question.hint = hint
+        question.knowledge_points = knowledge_points
+        question.grade = grade
+        question.subject = subject
+        question.question_type = question_type
+        question.difficulty_level = difficulty_level
+        question.difficulty_label = difficulty_label
+        question.updated_by = updated_by or 505
+
+        question.save()
+
+        return HttpResponse.ok({
+            'id': question.id,
+            'message': '题目更新成功'
+        })
+    except Exception as e:
+        logger.error(f"更新题目失败：{str(e)}")
+        return HttpResponse.error(f"更新题目失败：{str(e)}")
+
+
+@router.delete("/{question_id}")
+def delete_question(question_id: int):
+    """
+    删除题目（软删除）
+
+    Args:
+        question_id: 题目 ID
+
+    Returns:
+        操作结果
+    """
+    try:
+        question = QuestionPo.get_by_id(question_id)
+        if not question:
+            return HttpResponse.error("题目不存在")
+
+        # 软删除：设置 status=1
+        question.status = 1
+        question.save()
+
+        return HttpResponse.ok({'message': '题目删除成功'})
+    except Exception as e:
+        logger.error(f"删除题目失败：{str(e)}")
+        return HttpResponse.error(f"删除题目失败：{str(e)}")

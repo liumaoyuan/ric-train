@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Request, Query, Body
 
 from Base.RicUtils.httpUtils import HttpResponse
 from Education.services.examService import get_exam_service
@@ -41,7 +41,7 @@ def start_exam(request: Request, paper_id: int, user_id: str):
 
 
 @router.post("/{exam_id}/submit")
-def submit_exam(exam_id: int, answers: dict):
+def submit_exam(exam_id: int, answers: dict = Body(..., description="用户答案字典 {question_id: answer}")):
     """
     提交试卷
 

@@ -210,12 +210,12 @@ class ExamService(BaseModel):
 
         # 客观题使用固定逻辑判卷
         if question_type in ['single_choice', 'multiple_choice', 'judgement']:
-            judge_result = get_question_service().judge_question(
-                type('obj', (object,), {
-                    'question_id': question.id,
-                    'answer': user_answer
-                })()
+            from Education.models.pojo.questionBo import AiJudgeQuestionBo
+            params = AiJudgeQuestionBo(
+                question_id=question.id,
+                answer=user_answer
             )
+            judge_result = get_question_service().judge_question(params)
             score = judge_result['score'] * expected_score
             return {
                 'score': score,
@@ -226,14 +226,14 @@ class ExamService(BaseModel):
             }
         else:
             # 主观题使用 AI 判卷
-            judge_result = get_question_service().ai_judge_question(
-                type('obj', (object,), {
-                    'question_id': question.id,
-                    'answer': user_answer,
-                    'source': 'exam',
-                    'user_id': 'exam_grading'
-                })()
+            from Education.models.pojo.questionBo import AiJudgeQuestionBo
+            params = AiJudgeQuestionBo(
+                question_id=question.id,
+                answer=user_answer,
+                source='exam',
+                user_id='exam_grading'
             )
+            judge_result = get_question_service().ai_judge_question(params)
             score = judge_result['score'] * expected_score
             return {
                 'score': score,

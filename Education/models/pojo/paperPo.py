@@ -174,6 +174,91 @@ class PaperPo(DefaultDbModel):
             logger.error(f"get_versions({parent_id}) 失败：{str(e)}")
             return []
 
+    @classmethod
+    def get_paginated(cls, page: int = 1, page_size: int = 10, subject: str = None, status: str = None) -> dict:
+        """
+        分页查询试卷列表（只显示最新版本）
+
+        Args:
+            page: 页码，从 1 开始
+            page_size: 每页数量
+            subject: 科目筛选
+            status: 状态筛选
+
+        Returns:
+            {
+                'list': 试卷列表（最新版本），
+                'total': 总数，
+                'page': 当前页，
+                'page_size': 每页数量
+            }
+        """
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                return {'list': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+            table_name = cls.get_table_name()
+
+            # 构建查询条件
+            where_clauses = []
+            params = []
+
+            if subject:
+                where_clauses.append("`subject` = %s")
+                params.append(subject)
+
+            if status:
+                where_clauses.append("`status` = %s")
+                params.append(status)
+
+            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+            # 查询总数（只统计最新版本，通过 parent_id 分组）
+            count_sql = f"""
+                SELECT COUNT(DISTINCT IFNULL(`parent_id`, `id`)) as total
+                FROM `{table_name}`
+                WHERE {where_sql}
+            """
+            count_result = db.execute(count_sql, tuple(params))
+            total = count_result[0]['total'] if count_result else 0
+
+            # 分页查询 - 获取每个 parent_id 的最新版本
+            offset = (page - 1) * page_size
+            sql = f"""
+                SELECT p.* FROM `{table_name}` p
+                INNER JOIN (
+                    SELECT IFNULL(`parent_id`, `id`) as root_id, MAX(`created_at`) as max_time
+                    FROM `{table_name}`
+                    WHERE {where_sql}
+                    GROUP BY IFNULL(`parent_id`, `id`)
+                    ORDER BY max_time DESC
+                    LIMIT %s OFFSET %s
+                ) latest ON (p.`parent_id` = latest.root_id OR p.`id` = latest.root_id)
+                         AND p.`created_at` = latest.max_time
+                ORDER BY p.`created_at` DESC
+            """
+            new_params = params.copy()
+            new_params.extend([page_size, offset])
+            results = db.execute(sql, tuple(new_params))
+
+            if not results:
+                return {'list': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+            paper_list = [cls(**row) for row in results]
+
+            return {
+                'list': paper_list,
+                'total': total,
+                'page': page,
+                'page_size': page_size
+            }
+        except Exception as e:
+            logger = __import__('logging').getLogger(__name__)
+            logger.error(f"get_paginated 失败：{str(e)}")
+            return {'list': [], 'total': 0, 'page': page, 'page_size': page_size}
+
 
 if __name__ == '__main__':
     po = PaperPo()

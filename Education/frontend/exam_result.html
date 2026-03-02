@@ -268,6 +268,22 @@
             border-left: 3px solid #0056b3;
         }
 
+        .option-line {
+            display: flex;
+            padding: 6px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .option-line:last-child {
+            border-bottom: none;
+        }
+
+        .option-letter {
+            font-weight: 600;
+            min-width: 25px;
+            color: #667eea;
+        }
+
         /* 按钮 */
         .btn-group {
             display: flex;
@@ -465,25 +481,17 @@
             let apiUrl = '/education/exam/result/detail?';
             if (examId) {
                 apiUrl += `exam_id=${examId}`;
-                console.log('Loading question details for examId:', examId);
             } else if (examUuid) {
                 apiUrl += `exam_uuid=${examUuid}`;
-                console.log('Loading question details for examUuid:', examUuid);
             } else {
-                console.log('loadQuestionDetails: examId and examUuid are both null');
                 return;
             }
 
             fetch(apiUrl)
                 .then(res => res.json())
                 .then(data => {
-                    console.log('Question details response:', data);
                     if (data.status_code === 200 && data.data) {
                         questionDetailsCache = data.data.question_details || {};
-                        console.log('Cached question details:', Object.keys(questionDetailsCache));
-                        console.log('First question detail:', questionDetailsCache[Object.keys(questionDetailsCache)[0]]);
-                    } else {
-                        console.log('No question details in response');
                     }
                 })
                 .catch(err => {
@@ -549,6 +557,7 @@
             if (result.score_details) {
                 const detailsList = document.getElementById('scoreDetailsList');
                 let detailsHtml = '';
+                let questionIndex = 1;
 
                 for (const [qId, detail] of Object.entries(result.score_details)) {
                     const scoreClass = detail.score === detail.max_score ? 'full' :
@@ -557,12 +566,12 @@
                                      (detail.score === 0 ? 'wrong' : 'partial');
 
                     detailsHtml += `
-                        <div class="detail-item ${itemClass}" id="detailItem${qId}">
-                            <svg class="detail-arrow" viewBox="0 0 24 24" onclick="event.stopPropagation(); toggleDetail(${qId})">
+                        <div class="detail-item ${itemClass}" id="detailItem${qId}" onclick="toggleDetail(${qId})">
+                            <svg class="detail-arrow" viewBox="0 0 24 24">
                                 <path d="M8 5v14l11-7z"/>
                             </svg>
-                            <span class="detail-question" onclick="toggleDetail(${qId})">第${qId}题</span>
-                            <span class="detail-score ${scoreClass}" onclick="toggleDetail(${qId})">
+                            <span class="detail-question">第${questionIndex}题 (id:${qId})</span>
+                            <span class="detail-score ${scoreClass}">
                                 ${detail.score} / ${detail.max_score} 分
                             </span>
                         </div>
@@ -573,6 +582,7 @@
                             <div id="detailInner${qId}"></div>
                         </div>
                     `;
+                    questionIndex++;
                 }
 
                 detailsList.innerHTML = detailsHtml;
@@ -581,30 +591,16 @@
 
         // 展开/收起详情
         function toggleDetail(questionId) {
-            console.log('toggleDetail called with questionId:', questionId);
             const detailItem = document.getElementById(`detailItem${questionId}`);
-            const detailContent = document.getElementById(`detailContent${questionId}`);
             const detailInner = document.getElementById(`detailInner${questionId}`);
 
-            console.log('Elements found:', {
-                detailItem: !!detailItem,
-                detailContent: !!detailContent,
-                detailInner: !!detailInner
-            });
-
-            if (!detailItem) {
-                console.error('detailItem not found for questionId:', questionId);
-                return;
-            }
+            if (!detailItem) return;
 
             // 切换展开状态
             detailItem.classList.toggle('expanded');
-            console.log('Expanded state:', detailItem.classList.contains('expanded'));
 
             // 如果是展开且内容未加载，则加载内容
             if (detailItem.classList.contains('expanded') && detailInner.innerHTML === '') {
-                console.log('Rendering content for questionId:', questionId);
-                console.log('Cached data:', questionDetailsCache[String(questionId)]);
                 renderDetailContent(questionId, detailInner);
             }
         }
@@ -628,6 +624,11 @@
                 'essay': '作文题'
             };
 
+            // 从题干中提取选项
+            const extracted = extractOptions(detail.question_text);
+            const questionContent = extracted.question;
+            const questionOptions = extracted.options;
+
             let html = `
                 <div class="detail-section">
                     <div class="section-label">题目类型</div>
@@ -635,11 +636,26 @@
                 </div>
             `;
 
-            if (detail.question_text) {
+            // 题目内容
+            if (questionContent) {
                 html += `
                     <div class="detail-section">
                         <div class="section-label">题目内容</div>
-                        <div class="section-content">${detail.question_text}</div>
+                        <div class="section-content">${escapeHtml(questionContent)}</div>
+                    </div>
+                `;
+            }
+
+            // 渲染选项（如果有）
+            if (Object.keys(questionOptions).length > 0) {
+                html += `
+                    <div class="detail-section">
+                        <div class="section-label">选项</div>
+                        <div class="section-content">
+                            ${Object.entries(questionOptions).map(([letter, content]) => `
+                                <div class="option-line"><span class="option-letter">${letter}.</span><span>${escapeHtml(content)}</span></div>
+                            `).join('')}
+                        </div>
                     </div>
                 `;
             }
@@ -672,6 +688,30 @@
             }
 
             container.innerHTML = html;
+        }
+
+        // 从题干中提取选项
+        function extractOptions(questionText) {
+            const options = {};
+            const lines = questionText ? questionText.split('\n') : [];
+            let contentLines = [];
+            const optionPattern = /^([A-F])\s*[\.、]\s*(.+)$/;
+
+            lines.forEach(line => {
+                const match = line.match(optionPattern);
+                if (match) {
+                    const optionLetter = match[1];
+                    const optionContent = match[2].trim();
+                    options[optionLetter] = optionContent;
+                } else if (line.trim()) {
+                    contentLines.push(line);
+                }
+            });
+
+            return {
+                question: contentLines.join('\n'),
+                options: options
+            };
         }
 
         // HTML 转义

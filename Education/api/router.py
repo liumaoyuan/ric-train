@@ -4,6 +4,6 @@ from Education.api.core.examApi import router as exam_router
 
 
 def router_register(app):
-    app.include_router(question_router, tags=["教育局项目"])
-    app.include_router(paper_router, tags=["教育局项目"])
-    app.include_router(exam_router, tags=["教育局项目"])
+    app.include_router(question_router, tags=["教育局项目 - 题目"])
+    app.include_router(paper_router, tags=["教育局项目 - 试卷"])
+    app.include_router(exam_router, tags=["教育局项目 - 考试"])

@@ -243,6 +243,105 @@ class PaperService(BaseModel):
         paper.save()
         return True
 
+    @staticmethod
+    def get_paper_list(page: int = 1, page_size: int = 10, subject: str = None, status: str = None) -> dict:
+        """
+        分页获取试卷列表
+
+        Args:
+            page: 页码
+            page_size: 每页数量
+            subject: 科目筛选
+            status: 状态筛选
+
+        Returns:
+            分页结果
+        """
+        result = PaperPo.get_paginated(page=page, page_size=page_size, subject=subject, status=status)
+
+        # 转换为字典列表
+        paper_list = []
+        for paper in result['list']:
+            paper_list.append({
+                'id': paper.id,
+                'paper_uuid': paper.paper_uuid,
+                'paper_name': paper.paper_name,
+                'subject': paper.subject,
+                'duration_minutes': paper.duration_minutes,
+                'question_count': len(paper.get_question_id_list),
+                'total_score': paper.total_score,
+                'status': paper.status,
+                'created_at': paper.created_at.isoformat() if paper.created_at else None,
+                'created_by': paper.created_by
+            })
+
+        return {
+            'list': paper_list,
+            'total': result['total'],
+            'page': result['page'],
+            'page_size': result['page_size']
+        }
+
+    @staticmethod
+    def update_paper_questions(paper_id: int, question_ids: List[int], scores: List[float] = None) -> PaperPo:
+        """
+        更新试卷题目列表
+
+        Args:
+            paper_id: 试卷 ID
+            question_ids: 题目 ID 列表
+            scores: 每题分值列表
+
+        Returns:
+            更新后的试卷对象
+        """
+        return PaperService.update_paper(
+            paper_id=paper_id,
+            question_ids=question_ids,
+            scores=scores
+        )
+
+    @staticmethod
+    def restore_version(paper_id: int, updated_by: int = None) -> PaperPo:
+        """
+        恢复历史版本（创建该版本的新副本作为最新版本）
+
+        Args:
+            paper_id: 要恢复的版本 ID
+            updated_by: 更新者 ID
+
+        Returns:
+            新创建的试卷对象
+
+        Raises:
+            ValueError: 当试卷不存在时
+        """
+        # 获取要恢复的版本
+        source_paper = PaperPo.get_by_id(paper_id)
+        if not source_paper:
+            raise ValueError(f"试卷不存在：{paper_id}")
+
+        # 获取该试卷的 parent_id（版本根 ID）
+        parent_id = source_paper.parent_id or source_paper.id
+
+        # 创建新版本（复制源版本的所有配置）
+        new_paper = PaperPo(
+            parent_id=parent_id,
+            paper_name=source_paper.paper_name,
+            description=source_paper.description,
+            subject=source_paper.subject,
+            question_ids=source_paper.question_ids,
+            scores=source_paper.scores,
+            default_score_type=source_paper.default_score_type,
+            duration_minutes=source_paper.duration_minutes,
+            created_by=updated_by or source_paper.created_by,
+            status='draft'
+        )
+        new_paper.save()
+
+        logger.info(f"试卷版本恢复成功：新 id={new_paper.id}, 恢复到版本 id={paper_id}")
+        return new_paper
+
 
 def get_paper_service():
     """获取 PaperService 单例"""

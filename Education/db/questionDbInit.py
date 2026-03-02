@@ -2,6 +2,9 @@ from Base.Ai.base import SystemMessages, UserMessages
 from Base.Ai.llms.qwenLlm import get_default_qwen_llm
 from Base.Models.BaseParamsModel import BaseParamsModel
 from Education.models.pojo.questionPo import QuestionPo
+from Education.models.pojo.paperPo import PaperPo
+from Education.models.pojo.examPo import ExamPo
+from Education.models.pojo.answerPo import AnswerPo
 from Education.prompts.questionPrompts import (
     single_choice_rule,
     multiple_choice_rule,
@@ -298,12 +301,16 @@ def init_knowledge_points():
     print(f"\n知识点初始化完成！")
 
 def question_db_init():
+    """初始化题目数据库"""
     QuestionPo.create_table()
+    PaperPo.create_table()
+    ExamPo.create_table()
+    AnswerPo.create_table()
     init_question_subjects()
     init_question_types()
     init_question_difficulty_labels()
     init_question_rules()
-    # 👇这个比较耗时，可以单独执行，不必 初始化的时候执行
+    # 下面这个比较耗时，可以单独执行，不必初始化的时候执行
     # init_knowledge_points()
 
 if __name__ == '__main__':

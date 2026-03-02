@@ -258,6 +258,106 @@ class QuestionPo(DefaultDbModel):
             logger.error(f"{cls.__name__}.get_by_id({id_val}) 失败：{str(e)}")
             return None
 
+    @classmethod
+    def search(cls, keyword: str = None, subject: str = None, question_type: str = None,
+               grade: int = None, difficulty_level: int = None,
+               page: int = 1, page_size: int = 10) -> dict:
+        """
+        搜索题目
+
+        Args:
+            keyword: 关键词（搜索题干）
+            subject: 科目
+            question_type: 题型
+            grade: 年级
+            difficulty_level: 难度等级
+            page: 页码
+            page_size: 每页数量
+
+        Returns:
+            分页结果
+        """
+        try:
+            cls._ensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                return {'list': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+            table_name = cls.get_table_name()
+
+            # 构建查询条件
+            where_clauses = []
+            params = []
+
+            if keyword:
+                where_clauses.append("`question_text` LIKE %s")
+                params.append(f"%{keyword}%")
+
+            if subject:
+                where_clauses.append("`subject` = %s")
+                params.append(subject)
+
+            if question_type:
+                where_clauses.append("`question_type` = %s")
+                params.append(question_type)
+
+            if grade:
+                where_clauses.append("`grade` = %s")
+                params.append(grade)
+
+            if difficulty_level:
+                where_clauses.append("`difficulty_level` = %s")
+                params.append(difficulty_level)
+
+            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+            # 查询总数
+            count_sql = f"SELECT COUNT(*) as total FROM `{table_name}` WHERE {where_sql}"
+            count_result = db.execute(count_sql, tuple(params))
+            total = count_result[0]['total'] if count_result else 0
+
+            # 分页查询
+            offset = (page - 1) * page_size
+            sql = f"""
+                SELECT * FROM `{table_name}`
+                WHERE {where_sql}
+                ORDER BY `created_at` DESC
+                LIMIT %s OFFSET %s
+            """
+            params.extend([page_size, offset])
+            results = db.execute(sql, tuple(params))
+
+            if not results:
+                return {'list': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+            question_list = [cls(**row) for row in results]
+
+            # 转换为字典列表
+            result_list = []
+            for q in question_list:
+                result_list.append({
+                    'id': q.id,
+                    'question_uuid': q.question_uuid,
+                    'question_text': q.question_text,
+                    'question_type': q.question_type,
+                    'subject': q.subject,
+                    'grade': q.grade,
+                    'difficulty_level': q.difficulty_level,
+                    'answer': q.answer,
+                    'knowledge_points': q.knowledge_points
+                })
+
+            return {
+                'list': result_list,
+                'total': total,
+                'page': page,
+                'page_size': page_size
+            }
+        except Exception as e:
+            logger = __import__('logging').getLogger(__name__)
+            logger.error(f"search 失败：{str(e)}")
+            return {'list': [], 'total': 0, 'page': page, 'page_size': page_size}
+
 
 
 
