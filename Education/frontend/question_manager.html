@@ -562,6 +562,13 @@
                 </div>
 
                 <div class="form-row">
+                    <div class="form-group full-width">
+                        <label class="form-label">AI 判题提示词（可选）</label>
+                        <textarea class="form-textarea" id="questionAiJudgePrompt" placeholder="请输入 AI 判题时使用的提示词"></textarea>
+                    </div>
+                </div>
+
+                <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">知识点（可选）</label>
                         <input type="text" class="form-input" id="questionKnowledgePoints" placeholder="如：集合与元素，基本不等式">
@@ -767,6 +774,7 @@
                         document.getElementById('questionHtml').value = q.question_html || '';
                         document.getElementById('questionAnswer').value = q.answer || '';
                         document.getElementById('questionAnalysis').value = q.analysis || '';
+                        document.getElementById('questionAiJudgePrompt').value = q.ai_judge_prompt || '';
                         document.getElementById('questionKnowledgePoints').value = q.knowledge_points || '';
                         document.getElementById('questionHint').value = q.hint || '';
 
@@ -871,6 +879,7 @@
             params.append('question_html', document.getElementById('questionHtml').value.trim());
             params.append('answer', document.getElementById('questionAnswer').value.trim());
             params.append('analysis', document.getElementById('questionAnalysis').value.trim());
+            params.append('ai_judge_prompt', document.getElementById('questionAiJudgePrompt').value.trim());
             params.append('knowledge_points', document.getElementById('questionKnowledgePoints').value.trim());
             params.append('hint', document.getElementById('questionHint').value.trim());
             params.append('subject', document.getElementById('questionSubject').value);

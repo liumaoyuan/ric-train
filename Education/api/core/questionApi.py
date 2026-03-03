@@ -389,6 +389,7 @@ def create_question(
     analysis: Optional[str] = Form(None, description="题目解析"),
     hint: Optional[str] = Form(None, description="解题提示"),
     knowledge_points: Optional[str] = Form(None, description="知识点"),
+    ai_judge_prompt: Optional[str] = Form(None, description="AI 判题提示词"),
     grade: int = Form(..., description="年级"),
     subject: str = Form(..., description="科目"),
     question_type: str = Form(..., description="题型"),
@@ -424,6 +425,7 @@ def create_question(
             analysis=analysis,
             hint=hint,
             knowledge_points=knowledge_points,
+            ai_judge_prompt=ai_judge_prompt,
             grade=grade,
             subject=subject,
             question_type=question_type,
@@ -454,6 +456,7 @@ def update_question(
     analysis: Optional[str] = Form(None, description="题目解析"),
     hint: Optional[str] = Form(None, description="解题提示"),
     knowledge_points: Optional[str] = Form(None, description="知识点"),
+    ai_judge_prompt: Optional[str] = Form(None, description="AI 判题提示词"),
     grade: int = Form(..., description="年级"),
     subject: str = Form(..., description="科目"),
     question_type: str = Form(..., description="题型"),
@@ -493,6 +496,7 @@ def update_question(
         question.analysis = analysis
         question.hint = hint
         question.knowledge_points = knowledge_points
+        question.ai_judge_prompt = ai_judge_prompt
         question.grade = grade
         question.subject = subject
         question.question_type = question_type
