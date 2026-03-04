@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from Base.Ai.base import UserMessages
 from Base.Ai.base.baseEnum import LLMTypeEnum
-from Base.Ai.llms.qwenLlm import get_default_qwen_llm
+from Base.Ai.llms.qwenLlm import QwenLlm
 from Base.Models.BaseLLMConversationModel import BaseLLMConversationModel
 from Base.Models.BaseLLMSession import BaseLLMSession
 from Base.RicUtils.httpUtils import HttpResponse
@@ -19,13 +19,14 @@ from Base.Service.keywordService import keyword_replace_question
 from Base.Service.llmConversationService import save_conversation_from_db_2_vdb
 
 
-def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True):
+def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True, is_auditing: bool = True):
     """
     装饰器：自动持久化对话记录
 
     Args:
         auto_save_vdb: 是否自动保存到向量数据库
         is_rewriting: 是否问题改写
+        is_auditing: 是否文本校验
     """
 
     def decorator(func):
@@ -40,7 +41,7 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True):
             conversation = params.to_log_instance()
             session = BaseLLMSession.get_user_last_session(params.user_id, params.session_id)
             conversation.session_id = session.session_uuid
-            llm = get_default_qwen_llm()
+            llm = QwenLlm()
             conversation.ai_model = llm.model_name
             conversation.source = "base_chat_api"
 
@@ -49,10 +50,11 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True):
                 rewrite_question = ''
                 # 创建会话记录
                 # 文本审核
-                auditing_dict = AiService.auditing_text(question)
-                if auditing_dict.get('status') == 0:
-                    conversation.error_msg = auditing_dict.get('reason')
-                    raise AuditingTextError
+                if is_auditing:
+                    auditing_dict = AiService.auditing_text(question)
+                    if auditing_dict.get('status') == 0:
+                        conversation.error_msg = auditing_dict.get('reason')
+                        raise AuditingTextError
 
 
                 if is_rewriting:
@@ -214,7 +216,7 @@ router = APIRouter()
 
 
 @router.post("/chat-v1")
-@persist_conversation(auto_save_vdb=True)
+@persist_conversation(auto_save_vdb=True,is_auditing=False)
 def chat(params: ChatParams):
     """
     对话接口
@@ -222,7 +224,7 @@ def chat(params: ChatParams):
     - 支持思考模式（is_thinking=True）
     - 自动持久化会话记录到传统 DB 和 VDB（通过装饰器非侵入式实现）
     """
-    llm = get_default_qwen_llm()
+    llm = QwenLlm()
 
     full_messages = params.messages or [UserMessages(prompt=params.question)]
     del params.messages
