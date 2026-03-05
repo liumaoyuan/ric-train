@@ -262,9 +262,24 @@ class TencentCOSSettings(BaseEnvSettings):
 class BaseModuleSettings(BaseEnvSettings):
     db_name: Optional[str] = None
 
-
     model_config = SettingsConfigDict(
         env_prefix="BASE_",
+        extra="ignore",
+    )
+
+
+# =========================
+# GameHelper module
+# =========================
+class GameHelperSettings(BaseEnvSettings):
+    db_name: Optional[str] = "game_lol"
+    db_host: Optional[str] = None
+    db_port: Optional[int] = None
+    db_user: Optional[str] = None
+    db_password: Optional[str] = None
+
+    model_config = SettingsConfigDict(
+        env_prefix="GAME_",
         extra="ignore",
     )
 
@@ -291,6 +306,7 @@ class Settings(BaseEnvSettings):
     milvus: MilvusSettings = Field(default_factory=MilvusSettings)
     tencent_cos: TencentCOSSettings = Field(default_factory=TencentCOSSettings)
     base_module: BaseModuleSettings = Field(default_factory=BaseModuleSettings)
+    game_helper: GameHelperSettings = Field(default_factory=GameHelperSettings)
 
     # 覆盖 extra="ignore" 以避免加载未知的环境变量
     model_config = SettingsConfigDict(

@@ -46,3 +46,30 @@ def register_base_module_connection():
         logger.info(f"基础模块数据库连接注册成功 - host: {settings.mysql.host}, port: {settings.mysql.port}, database: {settings.base_module.db_name}, user: {settings.mysql.user}")
     except Exception as e:
         logger.warning(f"注册基础模块数据库连接失败，相关功能将无法持久化：{str(e)}")
+
+
+def register_game_helper_connection():
+    """注册 GameHelper 模块数据库连接，如果连接失败则记录日志但不影响程序运行"""
+    try:
+        # 使用 GAME_ 前缀的配置，如果未设置则回退到 DB_ 配置
+        db_name = settings.game_helper.db_name or settings.mysql.name
+        db_host = settings.game_helper.db_host or settings.mysql.host
+        db_port = settings.game_helper.db_port or settings.mysql.port
+        db_user = settings.game_helper.db_user or settings.mysql.user
+        db_password = settings.game_helper.db_password or settings.mysql.password
+
+        ConnectionManager.register(key='game_helper', db_connection=MySQLConnection(
+            host=db_host,
+            user=db_user,
+            password=db_password,
+            database=db_name,
+            port=db_port,
+            charset="utf8mb4",
+            mincached=2,
+            maxcached=10,
+            maxconnections=20,
+            blocking=False,
+        ))
+        logger.info(f"GameHelper 数据库连接注册成功 - host: {db_host}, port: {db_port}, database: {db_name}, user: {db_user}")
+    except Exception as e:
+        logger.warning(f"注册 GameHelper 数据库连接失败，相关功能将无法持久化：{str(e)}")
