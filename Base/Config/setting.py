@@ -28,8 +28,22 @@ class BaseEnvSettings(BaseSettings):
             )
     """
 
+    def __init__(self, **kwargs):
+        env_file = find_project_root() / ".env"
+        if not env_file.exists():
+            template_file = find_project_root() / ".env.template"
+            if template_file.exists():
+                raise FileNotFoundError(
+                    f"缺少 .env 配置文件，请根据 .env.template 文件创建后启动项目\n"
+                    f"参考模板路径：{template_file}"
+                )
+            else:
+                raise FileNotFoundError(
+                    "缺少 .env 配置文件，请创建 .env 文件后启动项目"
+                )
+        super().__init__(_env_file=env_file, **kwargs)
+
     model_config = SettingsConfigDict(
-        env_file=find_project_root() / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False, # 忽略大小写敏感
         extra="allow",  # 允许额外的字段
@@ -294,9 +308,8 @@ class Settings(BaseEnvSettings):
 
     # 覆盖 extra="ignore" 以避免加载未知的环境变量
     model_config = SettingsConfigDict(
-        env_file=find_project_root() / ".env",
         env_file_encoding="utf-8",
-        case_sensitive=False, # 大小写敏感？
+        case_sensitive=False,
         extra="ignore",
     )
 
