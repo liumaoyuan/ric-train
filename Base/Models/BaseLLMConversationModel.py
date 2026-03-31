@@ -70,7 +70,14 @@ class BaseLLMConversationModel(BaseModuleDBModel):
     created_at: Optional[datetime] = Field(None, description="创建时间")
 
     def to_messages(self, is_rewrite=False):
-        return [UserMessages(prompt=self.question if not is_rewrite else self.rewrite_question or self.question), AssistantMessages(prompt=self.answer[:100] if self.answer else self.error_msg + '...')]
+        # 安全构建 answer 或 error_msg
+        if self.answer:
+            answer_content = self.answer[:100]
+        elif self.error_msg:
+            answer_content = self.error_msg + '...'
+        else:
+            answer_content = ''
+        return [UserMessages(prompt=self.question if not is_rewrite else self.rewrite_question or self.question), AssistantMessages(prompt=answer_content)]
 
 
     @property
