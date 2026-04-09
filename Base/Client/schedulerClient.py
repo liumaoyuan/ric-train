@@ -174,7 +174,7 @@ if __name__ == '__main__':
         print("Hello from scheduled task!")
 
 
-    @client.scheduled(cron="*/5 * * * *", id='cron_task')  # 每5分钟
+    @client.scheduled(cron="*/1 * * * *", id='cron_task')  # 每5分钟
     def cron_job():
         print("Cron job executed at", datetime.now())
 
@@ -184,12 +184,12 @@ if __name__ == '__main__':
         print("Manual task running...")
 
 
-    client.add_job(manual_task, trigger='interval', minutes=2, id='manual_2min')
-
-    # 查看当前所有任务
-    print("\n当前调度任务列表：")
-    for job in client.get_jobs():
-        print(f"ID: {job['id']}, 下次运行: {job['next_run_time']}, 触发器: {job['trigger']}")
+    client.add_job(manual_task, trigger='interval', minutes=1, id='manual_2min')
+    #
+    # # 查看当前所有任务
+    # print("\n当前调度任务列表：")
+    # for job in client.get_jobs():
+    #     print(f"ID: {job['id']}, 下次运行: {job['next_run_time']}, 触发器: {job['trigger']}")
 
     # 主程序保持运行（Web 应用中不需要这个）
     try:

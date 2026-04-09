@@ -5,12 +5,18 @@ from typing import List, Optional, Tuple, Generator, Dict
 
 from Base.RicUtils.pathUtils import to_absolute_path
 
-# 过滤掉 jieba 库的 pkg_resources 废弃警告
-warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=UserWarning)
+# 临时过滤 jieba 库的警告（在导入前设置）
+with warnings.catch_warnings():
+    # 过滤掉 jieba 库的 pkg_resources 废弃警告
+    warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=UserWarning)
+    # 过滤掉 jieba 库及其子模块在 Python 3.12+ 中的无效转义字符警告
+    # 这些警告来自 jieba 内部正则表达式中的 '\.', '\s', '\d' 等转义字符
+    # 是 jieba 库本身的代码问题，不影响实际功能
+    warnings.filterwarnings("ignore", category=SyntaxWarning, message="invalid escape sequence")
 
-# 导入 jieba
-import jieba
-import jieba.analyse
+    # 导入 jieba 及其子模块
+    import jieba
+    import jieba.analyse
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +204,7 @@ class JiebaClient:
     def add_word(
         self,
         word: str,
-        freq: Optional[int] = None,
+        freq: Optional[int] = 100,
         tag: Optional[str] = None
     ) -> None:
         """
