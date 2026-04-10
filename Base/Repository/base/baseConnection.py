@@ -185,7 +185,7 @@ class BaseConnection(ABC):
         try:
             # logger.debug(f"准备执行 SQL: {sql}")
             with conn.cursor() as cur:
-                cur.execute(sql, params or ())
+                cur.execute(sql, params)
 
                 # 根据操作类型返回不同的结果
                 if operation_type == OperationType.QUERY:

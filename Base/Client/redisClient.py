@@ -6,6 +6,9 @@ import threading
 from typing import Optional, List, Generator
 from dotenv import load_dotenv
 
+from Base.Config.logConfig import setup_logging
+
+setup_logging()
 logger = logging.getLogger(__name__)
 load_dotenv()
 
@@ -240,7 +243,16 @@ if __name__ == "__main__":
 
         # 基本操作
         # redis_client1.set("name", "Alice", ex=3600)
-        # print("获取 name:", redis_client1.get("name"))
+        # redis_client1.set("ric", "ric ruan")
+        keys = redis_client1.scan_keys_generator()
+        print(keys)
+        # redis_client1.set('zhangliang','malatang',3000)
+        # redis_client1.set('daipeng','hello',3000)
+        # redis_client1.set('yifei','hi',3000)
+
+        # res = redis_client1.get('ric1')
+
+        # print("获取 name:", res)
         #
         # redis_client1.update("name", "Bob")
         # print("更新后 name:", redis_client1.get("name"))
@@ -258,11 +270,11 @@ if __name__ == "__main__":
         # redis_client1.fuzzy_delete("temp:*")  # 删除所有以 temp: 开头的键
 
         # 安全的模糊删除 (推荐)
-        deleted = redis_client1.fuzzy_delete_safe("*")
-        print(f"安全删除了 {deleted} 个键")
+        # deleted = redis_client1.fuzzy_delete_safe("*")
+        # print(f"安全删除了 {deleted} 个键")
 
         # 删除单个键
-        if redis_client1.delete("name"):
-            print("键 'name' 已删除")
+        # if redis_client1.delete("name"):
+        #     print("键 'name' 已删除")
     else:
         print("无法连接到 Redis，请检查服务是否运行。")
