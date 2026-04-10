@@ -1,6 +1,8 @@
 import json
 import logging
 import random
+import uuid
+from datetime import datetime
 from typing import List
 
 from pydantic import BaseModel, Field
@@ -9,7 +11,7 @@ from Base.Ai.base import SystemMessages, UserMessages
 from Base.Ai.llms.qwenLlm import get_default_qwen_llm
 from Base.Models.BaseParamsModel import BaseParamsModel
 from Education.prompts.common import prompt_render
-from Education.prompts.questionPrompts import ai_judge_prompt, SM_QUESTION_GENERATE_PROMPT
+from Education.prompts.questionPrompts import ai_judge_prompt, SM_QUESTION_GENERATE_PROMPT, IMPORT_QUESTION_PROMPT
 from Education.models.pojo.answerPo import AnswerPo
 from Education.models.pojo.questionBo import QuestionRandomBo, AiJudgeQuestionBo
 from Education.models.pojo.questionPo import QuestionPo
@@ -143,8 +145,23 @@ class QuestionService(BaseModel):
         """
         subject = question_random_bo.subject or random.choice(self.get_subjects()).get('value')
         question_type = question_random_bo.question_type or random.choice(self.get_question_types()).get('value')
-        difficulty_level = (question_random_bo.difficulty_level or
-                            random.choice(self.get_difficulty_levels()).get('value'))
+
+        # 处理难度等级：支持整数 (1-5) 和字符串 (easy/medium/hard) 两种格式
+        difficulty_input = question_random_bo.difficulty_level
+        if difficulty_input is None:
+            difficulty_level = random.choice(self.get_difficulty_levels()).get('value')
+        elif isinstance(difficulty_input, int):
+            # 整数转换为难度标签
+            if difficulty_input <= 2:
+                difficulty_level = 'easy'
+            elif difficulty_input <= 4:
+                difficulty_level = 'medium'
+            else:
+                difficulty_level = 'hard'
+        else:
+            # 字符串直接使用
+            difficulty_level = str(difficulty_input)
+
         grade_type = question_random_bo.grade_type or random.choice(['小学', '初中', '高中'])
         knowledge_points = self.sample_knowledge_points(self.get_knowledge_points(grade_type, subject))
 
@@ -189,6 +206,40 @@ class QuestionService(BaseModel):
         answer = AnswerPo(user_id=params.user_id, question_id=params.question_id, user_answer=params.answer,
                           ai_model=llm.model_name, ai_prompt=str(messages), source=params.source, **response)
         answer.save()
+        return response
+
+    @staticmethod
+    def ai_judge_question_with_data(question_data: dict, user_answer: str, user_id: str, source: str = 'agent_chat'):
+        """
+        AI 判题（使用题目数据字典，而不是从数据库查询）
+
+        Args:
+            question_data: 题目数据字典（包含 question_text, answer, analysis 等字段）
+            user_answer: 用户答案
+            user_id: 用户 ID
+            source: 来源
+
+        Returns:
+            判题结果字典
+        """
+        if not question_data:
+            raise ValueError("题目数据为空")
+
+        system_prompt = prompt_render(ai_judge_prompt, question_data)
+        user_prompt = f"""我的答案是：{user_answer}"""
+
+        messages = [SystemMessages(prompt=system_prompt), UserMessages(prompt=user_prompt)]
+
+        llm = get_default_qwen_llm()
+        response = llm.chat(messages)
+        response = json.loads(response)
+
+        # 如果没有 question_id，使用题目文本作为标识
+        question_id = question_data.get('id') or question_data.get('question_uuid') or 'temp_question'
+
+        answer = AnswerPo(user_id=user_id, question_id=question_id, user_answer=user_answer,
+                          ai_model=llm.model_name, ai_prompt=str(messages), source=source, **response)
+        # 注意：临时题目不保存到数据库
         return response
 
     @staticmethod
@@ -242,6 +293,123 @@ class QuestionService(BaseModel):
             ai_result = f"✓ 正确" if is_correct else f"✗ 错误。正确答案：{true_answer}"
 
         return {'score': score, 'ai_result': ai_result}
+
+    @staticmethod
+    def import_questions_from_text(
+        text: str,
+        subject: str,
+        grade_range: str = "7-9",
+        difficulty: int = 3,
+        question_type: str = None,
+        created_by: int = 505
+    ):
+        """
+        从文本中 AI 解析并导入题目
+
+        Args:
+            text: 包含题目的文本
+            subject: 科目
+            grade_range: 年级范围（如 "7-9" 表示初中）
+            difficulty: 默认难度（1-5）
+            question_type: 指定题型（可选，不指定则让 AI 自动判断）
+            created_by: 创建人 ID
+
+        Returns:
+            {'success': int, 'failed': int, 'questions': list, 'errors': list}
+        """
+        logger = logging.getLogger(__name__)
+        result = {'success': 0, 'failed': 0, 'questions': [], 'errors': []}
+
+        # 构建 prompt
+        user_prompt = prompt_render(
+            IMPORT_QUESTION_PROMPT,
+            {
+                'text': text,
+                'subject': subject,
+                'grade_range': grade_range,
+                'difficulty': difficulty,
+                'question_type': question_type or 'single_choice|multiple_choice|fill_blank|short_answer|essay|judgement'
+            }
+        )
+
+        system_msg = """你是一个专业的题目解析助手，擅长从各种格式的文本中提取题目信息。
+        请严格按照 JSON 数组格式输出，不要包含任何其他说明文字。
+        如果文本中包含参考答案，请将其与题目对应。
+        """
+
+        messages = [SystemMessages(prompt=system_msg), UserMessages(prompt=user_prompt)]
+
+        llm = get_default_qwen_llm()
+        try:
+            response = llm.chat(messages)
+            logger.info(f"AI 解析响应：{response[:500]}...")
+
+            # 尝试解析 JSON
+            response = response.strip()
+            # 处理可能的 markdown 代码块包装
+            if response.startswith('```json'):
+                response = response[7:]
+            if response.startswith('```'):
+                response = response[3:]
+            if response.endswith('```'):
+                response = response[:-3]
+            response = response.strip()
+
+            questions_data = json.loads(response)
+
+            # 确保是列表
+            if isinstance(questions_data, dict):
+                questions_data = [questions_data]
+
+            # 验证和插入题目
+            for i, q_data in enumerate(questions_data):
+                try:
+                    # 验证必需字段
+                    if not q_data.get('question_text') or not q_data.get('answer'):
+                        result['errors'].append(f"第{i + 1}道题缺少必需字段")
+                        result['failed'] += 1
+                        continue
+
+                    # 设置默认值
+                    q_data['question_uuid'] = str(uuid.uuid4())
+                    q_data['created_by'] = created_by
+                    q_data['subject'] = subject
+                    q_data['difficulty_level'] = q_data.get('difficulty_level', difficulty)
+                    q_data['question_type'] = q_data.get('question_type', question_type or 'single_choice')
+
+                    # 难度标签映射
+                    difficulty_level = q_data['difficulty_level']
+                    if difficulty_level <= 2:
+                        q_data['difficulty_label'] = 'easy'
+                    elif difficulty_level <= 4:
+                        q_data['difficulty_label'] = 'medium'
+                    else:
+                        q_data['difficulty_label'] = 'hard'
+
+                    # 创建 QuestionPo 对象
+                    question = QuestionPo(**q_data)
+                    question.save()
+
+                    result['questions'].append({
+                        'id': question.id,
+                        'question_uuid': question.question_uuid,
+                        'question_text': question.question_text[:50] + '...' if len(question.question_text) > 50 else question.question_text
+                    })
+                    result['success'] += 1
+
+                except Exception as e:
+                    logger.error(f"插入第{i + 1}道题失败：{str(e)}")
+                    result['errors'].append(f"第{i + 1}道题插入失败：{str(e)}")
+                    result['failed'] += 1
+
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON 解析失败：{str(e)}")
+            result['errors'].append(f"AI 返回格式错误：{str(e)}")
+        except Exception as e:
+            logger.error(f"解析题目失败：{str(e)}")
+            result['errors'].append(f"解析失败：{str(e)}")
+
+        return result
 
 
 question_service = QuestionService()

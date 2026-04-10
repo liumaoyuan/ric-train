@@ -58,6 +58,11 @@ def frontend_init(app: FastAPI):
         """题目管理页面"""
         return templates.TemplateResponse("question_manager.html", {"request": request})
 
+    @router.get("/agent-chat", response_class=HTMLResponse)
+    async def agent_chat_page(request: Request):
+        """Agent 聊天页面"""
+        return templates.TemplateResponse("agentChat.html", {"request": request})
+
     app.include_router(router, tags=["教育局项目 - 前端"])
 
     # 挂载静态文件目录

@@ -66,7 +66,8 @@ def submit_exam(exam_id: int, answers: dict = Body(..., description="用户答�
 
 
 @router.get("/result")
-def get_exam_result(exam_id: Optional[int] = Query(None, description="考试记录 ID（整数）"), exam_uuid: Optional[str] = Query(None, description="考试 UUID（字符串）")):
+def get_exam_result(exam_id: Optional[int] = Query(None, description="考试记录 ID（整数）"),
+                    exam_uuid: Optional[str] = Query(None, description="考试 UUID（字符串）")):
     """
     获取考试结果
 
@@ -120,7 +121,8 @@ def get_exam_result_by_id(exam_id: int):
 
 
 @router.get("/result/detail")
-def get_exam_result_detail(exam_id: Optional[int] = Query(None, description="考试记录 ID（整数）"), exam_uuid: Optional[str] = Query(None, description="考试 UUID（字符串）")):
+def get_exam_result_detail(exam_id: Optional[int] = Query(None, description="考试记录 ID（整数）"),
+                           exam_uuid: Optional[str] = Query(None, description="考试 UUID（字符串）")):
     """
     获取考试结果详情（包含每题详细内容）
 

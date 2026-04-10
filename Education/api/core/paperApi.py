@@ -13,10 +13,10 @@ router = APIRouter(prefix="/education/paper")
 
 @router.get("/list")
 def get_paper_list(
-    page: Optional[int] = Query(1, description="页码"),
-    page_size: Optional[int] = Query(10, description="每页数量"),
-    subject: Optional[str] = Query(None, description="科目"),
-    status: Optional[str] = Query(None, description="状态")
+        page: Optional[int] = Query(1, description="页码"),
+        page_size: Optional[int] = Query(10, description="每页数量"),
+        subject: Optional[str] = Query(None, description="科目"),
+        status: Optional[str] = Query(None, description="状态")
 ):
     """
     分页获取试卷列表
@@ -66,13 +66,13 @@ def get_paper_detail(paper_id: int):
 
 @router.post("")
 def create_paper(
-    paper_name: str = Form(..., description="试卷名称"),
-    question_ids: str = Form(..., description="题目 ID 列表（逗号分隔）"),
-    scores: Optional[str] = Form(None, description="每题分值（逗号分隔）"),
-    description: Optional[str] = Form(None, description="试卷描述"),
-    subject: Optional[str] = Form(None, description="科目"),
-    duration_minutes: Optional[int] = Form(30, description="考试时长（分钟）"),
-    created_by: Optional[int] = Form(505, description="创建者 ID")
+        paper_name: str = Form(..., description="试卷名称"),
+        question_ids: str = Form(..., description="题目 ID 列表（逗号分隔）"),
+        scores: Optional[str] = Form(None, description="每题分值（逗号分隔）"),
+        description: Optional[str] = Form(None, description="试卷描述"),
+        subject: Optional[str] = Form(None, description="科目"),
+        duration_minutes: Optional[int] = Form(30, description="考试时长（分钟）"),
+        created_by: Optional[int] = Form(505, description="创建者 ID")
 ):
     """
     创建试卷
@@ -163,14 +163,14 @@ def publish_paper(paper_id: int):
 
 @router.put("/{paper_id}")
 def update_paper(
-    paper_id: int,
-    paper_name: str = Form(..., description="试卷名称"),
-    question_ids: str = Form(..., description="题目 ID 列表（逗号分隔）"),
-    scores: Optional[str] = Form(None, description="每题分值（逗号分隔）"),
-    description: Optional[str] = Form(None, description="试卷描述"),
-    subject: Optional[str] = Form(None, description="科目"),
-    duration_minutes: Optional[int] = Form(30, description="考试时长（分钟）"),
-    updated_by: Optional[int] = Form(505, description="更新者 ID")
+        paper_id: int,
+        paper_name: str = Form(..., description="试卷名称"),
+        question_ids: str = Form(..., description="题目 ID 列表（逗号分隔）"),
+        scores: Optional[str] = Form(None, description="每题分值（逗号分隔）"),
+        description: Optional[str] = Form(None, description="试卷描述"),
+        subject: Optional[str] = Form(None, description="科目"),
+        duration_minutes: Optional[int] = Form(30, description="考试时长（分钟）"),
+        updated_by: Optional[int] = Form(505, description="更新者 ID")
 ):
     """
     更新试卷（创建新版本）
@@ -242,8 +242,8 @@ def delete_paper(paper_id: int):
 
 @router.post("/{paper_id}/restore")
 def restore_paper_version(
-    paper_id: int,
-    updated_by: Optional[int] = Form(505, description="更新者 ID")
+        paper_id: int,
+        updated_by: Optional[int] = Form(505, description="更新者 ID")
 ):
     """
     恢复试卷历史版本

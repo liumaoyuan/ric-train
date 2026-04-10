@@ -1,10 +1,9 @@
 import concurrent.futures
+import logging
 import threading
 import uuid
-import io
-import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Response, UploadFile, File, Query, Form
@@ -12,7 +11,7 @@ from fastapi import APIRouter, Response, UploadFile, File, Query, Form
 from Base.RicUtils.dataUtils import remove_none
 from Base.RicUtils.excelUtils import dict_list_to_excel, excel_to_dict_list
 from Base.RicUtils.httpUtils import HttpResponse
-from Education.models.pojo.questionBo import AiJudgeQuestionBo, QuestionRandomBo
+from Education.models.pojo.questionBo import AiJudgeQuestionBo, QuestionRandomBo, QuestionImportBo
 from Education.models.pojo.questionPo import QuestionPo
 from Education.models.pojo.questionVo import QuestionRandomParamVo
 from Education.services.questionService import get_question_service
@@ -539,3 +538,114 @@ def delete_question(question_id: int):
     except Exception as e:
         logger.error(f"删除题目失败：{str(e)}")
         return HttpResponse.error(f"删除题目失败：{str(e)}")
+
+
+@router.post("/import/text")
+async def import_questions_from_text(params: QuestionImportBo):
+    """
+    AI 解析文本导入题目接口
+
+    用户输入包含题目的文本，AI 自动解析并批量插入到题目表。
+
+    Args:
+        params: 导入参数
+            - text: 包含题目的文本
+            - subject: 科目（必填）
+            - grade_range: 年级范围（如 "1-6" 小学，"7-9" 初中，"10-12" 高中）
+            - difficulty: 默认难度（1-5）
+            - question_type: 指定题型（可选）
+            - created_by: 创建人 ID
+
+    Returns:
+        导入结果：
+            - success: 成功导入数量
+            - failed: 失败数量
+            - questions: 导入成功的题目列表
+            - errors: 错误信息
+
+    Example:
+        {
+            "text": "1. Python 是什么语言？\n   A. 编译型 B. 解释型...\n   答案：B",
+            "subject": "python",
+            "grade_range": "7-9",
+            "difficulty": 3
+        }
+    """
+    try:
+        result = get_question_service().import_questions_from_text(
+            text=params.text,
+            subject=params.subject,
+            grade_range=params.grade_range,
+            difficulty=params.difficulty,
+            question_type=params.question_type,
+            created_by=params.created_by
+        )
+        return HttpResponse.ok(result)
+    except Exception as e:
+        logger.error(f"导入题目失败：{str(e)}")
+        return HttpResponse.error(f"导入失败：{str(e)}")
+
+
+@router.post("/import/file")
+async def import_questions_from_file(
+    file: UploadFile = File(...),
+    subject: str = Form(..., description="科目"),
+    grade_range: str = Form("7-9", description="年级范围"),
+    difficulty: int = Form(3, description="默认难度"),
+    question_type: str = Form(None, description="指定题型")
+):
+    """
+    上传文件导入题目接口
+
+    支持 .txt, .md, .docx 文件格式。
+
+    Args:
+        file: 上传的文件
+        subject: 科目（必填）
+        grade_range: 年级范围
+        difficulty: 默认难度
+        question_type: 指定题型
+
+    Returns:
+        导入结果（同 text 接口）
+
+    Example:
+        curl -X POST "http://localhost:8000/education/question/import/file" \\
+             -F "file=@questions.txt" \\
+             -F "subject=python" \\
+             -F "grade_range=7-9"
+    """
+    # 检查文件类型
+    allowed_extensions = ['.txt', '.md', '.docx']
+    file_ext = None
+    if file.filename:
+        for ext in allowed_extensions:
+            if file.filename.endswith(ext):
+                file_ext = ext
+                break
+
+    if not file_ext:
+        return HttpResponse.error(f"不支持的文件格式，仅支持：{', '.join(allowed_extensions)}")
+
+    try:
+        # 读取文件内容
+        file_content = await file.read()
+        text = file_content.decode('utf-8')
+
+        # 调用文本导入接口
+        result = get_question_service().import_questions_from_text(
+            text=text,
+            subject=subject,
+            grade_range=grade_range,
+            difficulty=difficulty,
+            question_type=question_type
+        )
+
+        return HttpResponse.ok(result)
+
+    except UnicodeDecodeError as e:
+        logger.error(f"文件编码错误：{str(e)}")
+        return HttpResponse.error(f"文件编码错误，请使用 UTF-8 编码：{str(e)}")
+    except Exception as e:
+        logger.error(f"导入题目失败：{str(e)}")
+        return HttpResponse.error(f"导入失败：{str(e)}")
