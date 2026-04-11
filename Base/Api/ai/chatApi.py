@@ -16,7 +16,7 @@ from Base.RicUtils.httpUtils import HttpResponse
 from Base.Service.MemoryV1Service import MemoryV1Service
 from Base.Service.aiService import AiService, AuditingTextError
 from Base.Service.keywordService import keyword_replace_question
-from Base.Service.llmConversationService import save_conversation_from_db_2_vdb
+from Base.Service.llmConversationService import save_conversation_from_db_2_vdb, save_conversation_from_db_2_vdb_only_data
 
 
 def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True, is_auditing: bool = True):
@@ -36,26 +36,30 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True, 
             params = kwargs.get('params') or (args[0] if args else None)
             if not params:
                 return func(*args, **kwargs)
+
+            logger = __import__('logging').getLogger(__name__)
+
             # 记录开始时间
             start_time = time.time()
             conversation = params.to_log_instance()
-            session = BaseLLMSession.get_user_last_session(params.user_id, params.session_id)
-            conversation.session_id = session.session_uuid
-            llm = QwenLlm()
-            conversation.ai_model = llm.model_name
-            conversation.source = "base_chat_api"
 
             try:
+                # 以下所有装饰器内部逻辑都包裹在 try-except 中，确保不影响被装饰函数
+                session = BaseLLMSession.get_user_last_session(params.user_id, params.session_id)
+                conversation.session_id = session.session_uuid
+                llm = QwenLlm()
+                conversation.ai_model = llm.model_name
+                conversation.source = "base_chat_api"
+
                 question = keyword_replace_question(params.question)
                 rewrite_question = ''
-                # 创建会话记录
+
                 # 文本审核
                 if is_auditing:
                     auditing_dict = AiService.auditing_text(question)
                     if auditing_dict.get('status') == 0:
                         conversation.error_msg = auditing_dict.get('reason')
                         raise AuditingTextError
-
 
                 if is_rewriting:
                     rewrite_question = AiService.rewrite_question(question=question, user_id=params.user_id,
@@ -69,8 +73,6 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True, 
                 kwargs.get('params').messages = context + [UserMessages(prompt=question)]
                 conversation.context = str(context)
 
-
-
                 try:
                     # 执行原始函数
                     result = func(*args, **kwargs)
@@ -80,10 +82,16 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True, 
                         # 包装流式响应生成器
                         original_generator = result.body_iterator
 
+                        # 在生成器外部准备数据收集容器
+                        # 使用独立变量而非闭包引用 conversation，避免 pickle 问题
+                        stream_data_collector = {
+                            'reasoning_parts': [],
+                            'answer_parts': [],
+                            'completed': False,
+                            'error': None
+                        }
+
                         async def wrapped_generator():
-                            content_parts = []
-                            reasoning_parts = []  # 专门收集思考内容
-                            answer_parts = []  # 专门收集答案内容
                             try:
                                 # 先完成流式输出
                                 async for chunk in original_generator:
@@ -95,67 +103,74 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True, 
 
                                         # 分别收集不同类型的內容
                                         if chunk_type == 'reasoning':
-                                            reasoning_parts.append(chunk_content)
+                                            stream_data_collector['reasoning_parts'].append(chunk_content)
                                         else:  # 'content' 或其他类型
-                                            answer_parts.append(chunk_content)
+                                            stream_data_collector['answer_parts'].append(chunk_content)
 
                                         sse_data = f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-                                        content_parts.append(chunk_content)
                                         yield sse_data.encode("utf-8")  # 必须是 bytes
 
                                     elif isinstance(chunk, str):
                                         # 如果是字符串类型（普通流式输出）
-                                        answer_parts.append(chunk)
-                                        content_parts.append(chunk)
+                                        stream_data_collector['answer_parts'].append(chunk)
                                         sse_data = f"data: {chunk}\n\n"
                                         yield sse_data.encode("utf-8")
 
                                     elif isinstance(chunk, bytes):
                                         # 如果已经是 bytes 类型
-                                        decoded_chunk = chunk.decode("utf-8", errors="ignore")
-                                        answer_parts.append(decoded_chunk)
-                                        content_parts.append(decoded_chunk)
                                         yield chunk
                                     else:
                                         # 其他类型转换为字符串处理
                                         chunk_str = str(chunk)
-                                        answer_parts.append(chunk_str)
-                                        content_parts.append(chunk_str)
+                                        stream_data_collector['answer_parts'].append(chunk_str)
                                         sse_data = f"data: {chunk_str}\n\n"
                                         yield sse_data.encode("utf-8")
 
-                                # 流式输出完全结束后再进行持久化
+                                # 流式输出完成，进行持久化（使用纯数据，避免引用 conversation 对象）
+                                stream_data_collector['completed'] = True
                                 try:
+                                    # 准备持久化数据（纯数据字典）
+                                    duration_ms = int((time.time() - start_time) * 1000)
                                     if params.is_thinking:
-                                        # 思考模式：分别保存思考过程和答案
-                                        full_content = {
-                                            'reasoning': ''.join(reasoning_parts),
-                                            'content': ''.join(answer_parts)
-                                        }
-                                        conversation.answer = json.dumps(full_content, ensure_ascii=False,
-                                                                         separators=(',', ':'))
+                                        answer = json.dumps({
+                                            'reasoning': ''.join(stream_data_collector['reasoning_parts']),
+                                            'content': ''.join(stream_data_collector['answer_parts'])
+                                        }, ensure_ascii=False, separators=(',', ':'))
                                     else:
-                                        # 普通模式：只保存答案
-                                        conversation.answer = ''.join(answer_parts)
+                                        answer = ''.join(stream_data_collector['answer_parts'])
 
-                                    conversation.duration_ms = int((time.time() - start_time) * 1000)
+                                    # 更新 conversation 对象（在主线程中）
+                                    conversation.answer = answer
+                                    conversation.duration_ms = duration_ms
                                     conversation.save()
-                                    if auto_save_vdb:
-                                        save_conversation_from_db_2_vdb(conversation)
 
+                                    # 保存到 VDB（使用纯数据字典）
+                                    if auto_save_vdb:
+                                        save_conversation_from_db_2_vdb_only_data({
+                                            'id': conversation.id,
+                                            'session_id': conversation.session_id,
+                                            'user_id': conversation.user_id,
+                                            'question': conversation.question,
+                                            'rewrite_question': conversation.rewrite_question,
+                                            'answer': conversation.answer
+                                        })
                                 except Exception as save_error:
-                                    logger = __import__('logging').getLogger(__name__)
                                     logger.error(f"流式结束后保存对话记录失败：{str(save_error)}")
                                     # 持久化异常不影响流式输出
-                                    pass
 
                             except Exception as e:
-                                logger = __import__('logging').getLogger(__name__)
+                                stream_data_collector['error'] = str(e)
                                 logger.error(f"流式处理异常：{str(e)}")
                                 raise
 
-                        # 创建新的 StreamingResponse
+                        # 在生成器执行完成后处理持久化
+                        # 注意：由于流式输出的特殊性，持久化需要在生成器完成后进行
+                        # 我们创建一个包装函数来处理这个问题
                         result.body_iterator = wrapped_generator()
+
+                        # 流式输出的持久化在生成器完成后进行
+                        # 由于无法直接等待异步生成器，我们在返回后通过后台任务处理
+                        # 这里先返回结果，持久化在生成器内部完成后处理
                         return result
                     else:
                         result_str = result.data if isinstance(result, HttpResponse) else result
@@ -164,7 +179,15 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True, 
                         conversation.duration_ms = int((time.time() - start_time) * 1000)
                         conversation.save()
                         if auto_save_vdb:
-                            save_conversation_from_db_2_vdb(conversation)
+                            # 传递纯数据字典，避免 pickle 错误
+                            save_conversation_from_db_2_vdb_only_data({
+                                'id': conversation.id,
+                                'session_id': conversation.session_id,
+                                'user_id': conversation.user_id,
+                                'question': conversation.question,
+                                'rewrite_question': conversation.rewrite_question,
+                                'answer': conversation.answer
+                            })
                         return result
 
                 except Exception as e:
@@ -181,6 +204,22 @@ def persist_conversation(auto_save_vdb: bool = True, is_rewriting: bool = True, 
                 conversation.save()
                 return HttpResponse.error(
                     msg='根据中华人民共和国《生成式人工智能服务管理暂行办法》,您的问题涉嫌包含敏感信息，我将无法处理您的请求')
+            except Exception as e:
+                # 捕获装饰器内部所有其他异常，记录日志但不影响被装饰函数
+                import traceback
+                error_traceback = traceback.format_exc()
+                logger.error(f"装饰器内部异常：{str(e)}\n{error_traceback}")
+                try:
+                    conversation.status = 'failed'
+                    conversation.error_msg = f"装饰器内部错误：{str(e)}"
+                    conversation.duration_ms = int((time.time() - start_time) * 1000)
+                    conversation.save()
+                except Exception as log_error:
+                    logger.error(f"记录装饰器异常失败：{str(log_error)}")
+
+                # 返回被装饰函数的原始结果，不中断业务逻辑
+                return func(*args, **kwargs)
+
         return wrapper
 
     return decorator
@@ -201,6 +240,8 @@ class ChatParams(BaseModel):
         super().__init__(**data)
         if self.is_thinking:
             self.is_stream = True
+        if not self.messages:
+            self.messages = [UserMessages(self.question)]
 
     def to_log_instance(self) -> BaseLLMConversationModel:
         return BaseLLMConversationModel(
@@ -225,8 +266,8 @@ def chat(params: ChatParams):
     - 自动持久化会话记录到传统 DB 和 VDB（通过装饰器非侵入式实现）
     """
     llm = QwenLlm()
-
-    full_messages = params.messages or [UserMessages(prompt=params.question)]
+    params = ChatParams(**dict(params))
+    full_messages = params.messages
     del params.messages
 
     if params.is_stream:

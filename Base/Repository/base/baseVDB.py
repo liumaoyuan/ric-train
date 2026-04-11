@@ -2,7 +2,7 @@ import logging
 from abc import ABC
 from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar, get_type_hints
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 from pymilvus import CollectionSchema, FieldSchema, DataType, Function, FunctionType, AnnSearchRequest
 
 from Base.Repository.base.baseVDBConnection import BaseVDBConnection
@@ -132,18 +132,21 @@ class BaseVDBModel(BaseModel, ABC):
     # 类变量：BM25 函数配置（可选）
     _bm25_functions: ClassVar[Optional[List[Dict[str, str]]]] = None
 
-    # 类变量：默认向量数据库连接（全局默认）
-    _default_vdb_connection: ClassVar[Optional[BaseVDBConnection]] = get_default_milvus_vdb_connection()
-    # 类变量：每个类可以有自己的连接
-    _vdb_connection: ClassVar[Optional[BaseVDBConnection]] = get_default_milvus_vdb_connection()
-    # 实例变量：实例级别的连接（优先级最高）
-    _instance_vdb_connection: Optional[BaseVDBConnection] = get_default_milvus_vdb_connection()
     # 类变量：集合检查缓存（避免重复检查）
     _collection_checked: ClassVar[bool] = False
+
+    # 实例变量：向量数据库连接（使用 PrivateAttr 避免 Pydantic 尝试 deepcopy）
+    # 优先级：实例级别 > 类级别 > 全局默认
+    _instance_vdb_connection: Optional[BaseVDBConnection] = PrivateAttr(default=None)
+    _vdb_connection: ClassVar[Optional[BaseVDBConnection]] = None
+    _default_vdb_connection: ClassVar[Optional[BaseVDBConnection]] = None
 
     def __init__(self, **data):
         """初始化模型实例，并在需要时自动创建集合"""
         super().__init__(**data)
+        # 惰性初始化实例连接
+        if self._instance_vdb_connection is None:
+            self._instance_vdb_connection = get_default_milvus_vdb_connection()
         # 使用类方法调用，避免实例方法调用问题
         cls = self.__class__
         if cls.auto_create_collection and not cls._collection_checked:
@@ -153,7 +156,14 @@ class BaseVDBModel(BaseModel, ABC):
     def get_connection(cls) -> BaseVDBConnection:
         """
         获取数据库连接（优先级：实例级别 > 类级别 > 全局默认）
+        惰性初始化连接，避免 Pydantic deepcopy 问题
         """
+        # 类级别的惰性初始化
+        if cls._vdb_connection is None:
+            cls._vdb_connection = get_default_milvus_vdb_connection()
+        if cls._default_vdb_connection is None:
+            cls._default_vdb_connection = get_default_milvus_vdb_connection()
+
         return cls._vdb_connection or cls._default_vdb_connection
 
     @classmethod
