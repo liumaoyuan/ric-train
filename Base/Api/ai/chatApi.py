@@ -266,9 +266,7 @@ def chat(params: ChatParams):
     - 自动持久化会话记录到传统 DB 和 VDB（通过装饰器非侵入式实现）
     """
     llm = QwenLlm()
-    params = ChatParams(**dict(params))
     full_messages = params.messages
-    del params.messages
 
     if params.is_stream:
         # 流式输出：启用思考模式和流式传输

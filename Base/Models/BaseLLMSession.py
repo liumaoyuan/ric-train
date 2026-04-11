@@ -113,6 +113,12 @@ class BaseLLMSession(BaseModuleDBModel):
                 find_by_filter.pop("session_uuid")
             result = cls.find_by(**find_by_filter)
             if not result:
+                if session_id:
+                    # 填写了 session_id 但是填的错的 ，优先返回最近的一条会话
+                    find_by_filter.pop("session_uuid")
+                    result = cls.find_by(**find_by_filter)
+                    if result:
+                        return result[0]
                 return cls.get_or_create_session(user_id=user_id)
             return result[0] if result else None
         except Exception as e:
@@ -206,5 +212,5 @@ class BaseLLMSession(BaseModuleDBModel):
 
 if __name__ == '__main__':
     # 创建表
-    res = BaseLLMSession.get_user_last_session("liujie")
+    res = BaseLLMSession.get_user_last_session("string",None)
     print(f"{res}")
