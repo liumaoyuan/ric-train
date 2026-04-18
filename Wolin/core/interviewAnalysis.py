@@ -19,6 +19,7 @@ from Wolin.service.emailService import EmailService
 from Wolin.prompt.insertviewPrompt import COMBINE_SLICE_PROMPT, ANALYSIS_START_PROMPT, REPORT_PROMPT, CORE_QA_EXTRACT_PROMPT, \
     CORE_QA_ANALYSIS_PROMPT, render, INTERVIEW_EVALUATION_PROMPT, SELF_EVALUATION_PROMPT, ANALYSIS_END_PROMPT, \
     RESUME_JSON_EXTRACT_PROMPT, RESUME_ANALYSIS_PROMPT
+from deprecated import deprecated
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ def init_temp_reports():
         return {}
 
 
+@deprecated(version='1.0', reason="该类已被弃用，请使用ai/interview 下面的langGraph封装逻辑")
 class InterviewAnalysis:
     asr_service = get_asr_service()
     minio_service = get_minio_service()

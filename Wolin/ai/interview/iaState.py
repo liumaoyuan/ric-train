@@ -6,13 +6,13 @@ from WorkFlow.base.baseState import BaseState
 
 
 class Report(BaseModel):
-    analysis_start: Optional[str] = Field(None, description='报告段落-开始')
-    interview_json: Optional[dict] = Field(None, description='面试详情表格json')
+    analysis_start: Optional[str] = Field(None, description='报告段落 - 开始')
+    interview_json: Optional[dict] = Field(None, description='面试详情表格 json')
     qa_analysis: Optional[list | str] = Field(None, description='问答对分析点评')
     resume_analysis: Optional[str] = Field(None, description='简历分析点评')
-    interview_evaluation: Optional[str] = Field(None, description='AI代入面试评价')
+    interview_evaluation: Optional[str] = Field(None, description='AI 代入面试评价')
     self_evaluation: Optional[str] = Field(None, description='自我评价')
-    analysis_end: Optional[str] = Field(None, description='报告段落-结束')
+    analysis_end: Optional[str] = Field(None, description='报告段落 - 结束')
 
 
 class ASRInfo(BaseModel):
@@ -59,9 +59,12 @@ def merge_report(left: Optional[Report], right: Optional[Any]) -> Optional[Repor
 
 class IAState(BaseState):
     report: Annotated[Report, merge_report] = Field(default_factory=Report, description='报告')
-    asr_info: ASRInfo = Field(default_factory=ASRInfo, description='asr信息')
+    asr_info: ASRInfo = Field(default_factory=ASRInfo, description='asr 信息')
     resume_info: ResumeInfo = Field(default_factory=ResumeInfo, description='简历信息')
-    api_params: ApiParams = Field(default_factory=ApiParams, description='api参数')
+    api_params: ApiParams = Field(default_factory=ApiParams, description='api 参数')
+
+    # 持久化相关字段
+    record_uuid: Optional[str] = Field(None, description='数据库记录 UUID')
 
 
     @property
