@@ -155,15 +155,17 @@ class QuestionPo(DefaultDbModel):
 
     @classmethod
     def get_random_question(cls,
-                          subject: Optional[str] = None,
-                          question_type: Optional[str] = None,
-                          difficulty_level: Optional[int] = None,
-                          grade: Optional[int] = None,
-                          num: int = 1) -> Optional['QuestionPo'] | List['QuestionPo']:
+                            user_id = None,
+                            subject: Optional[str] = None,
+                            question_type: Optional[str] = None,
+                            difficulty_level: Optional[int] = None,
+                            grade: Optional[int] = None,
+                            num: int = 1) -> Optional['QuestionPo'] | List['QuestionPo']:
         """
         根据条件随机查询题目
 
         Args:
+            user_id: 用户ID
             subject: 科目（可选）
             question_type: 题型（可选）
             difficulty_level: 难度等级 1-5（可选）
@@ -204,7 +206,13 @@ class QuestionPo(DefaultDbModel):
 
             # 构建 SQL
             where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
-            sql = f"SELECT * FROM `{table_name}` WHERE {where_sql} ORDER BY RAND() LIMIT {num}"
+            if user_id is not None:
+                sql = (f"SELECT * FROM `{table_name}` WHERE {where_sql} "
+                       f"AND id NOT IN (SELECT a2.question_id FROM answers a2 WHERE user_id = '{user_id}' AND score = 1) "
+                       f"ORDER BY RAND() LIMIT {num}")
+            else:
+                sql = (f"SELECT * FROM `{table_name}` WHERE {where_sql} "
+                       f"ORDER BY RAND() LIMIT {num}")
 
             results = db.execute(sql, tuple(params))
 
@@ -245,7 +253,7 @@ class QuestionPo(DefaultDbModel):
             table_name = cls.get_table_name()
 
             sql = f"SELECT * FROM `{table_name}` WHERE `id` = %s or `question_uuid` = %s limit 1"
-            params = (id_val,str(id_val))
+            params = (id_val, str(id_val))
 
             result = db.execute(sql, params)
 
@@ -357,8 +365,6 @@ class QuestionPo(DefaultDbModel):
             logger = __import__('logging').getLogger(__name__)
             logger.error(f"search 失败：{str(e)}")
             return {'list': [], 'total': 0, 'page': page, 'page_size': page_size}
-
-
 
 
 if __name__ == '__main__':
