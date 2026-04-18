@@ -1,8 +1,10 @@
 import concurrent.futures
 import logging
+import random
 import threading
 import uuid
 from datetime import datetime
+from dbm.dumb import error
 from typing import Optional
 from urllib.parse import quote
 
@@ -39,6 +41,7 @@ def get_subjects():
 
 @router.get("/random_one")
 def get_random_one_question(
+    user_id: str = Query(None, description="用户ID"),
     subject: Optional[str] = Query(None, description="科目"),
     question_type: Optional[str] = Query(None, description="题型"),
     difficulty_level: Optional[int] = Query(None, description="难度等级 1-5"),
@@ -49,6 +52,7 @@ def get_random_one_question(
     随机返回题目
 
     Args:
+        user_id: 用户ID
         subject: 科目筛选（可选）
         question_type: 题型筛选（可选）
         difficulty_level: 难度等级筛选 1-5（可选）
@@ -63,7 +67,8 @@ def get_random_one_question(
 
     # 一次性查询 num 道题目
     questions = QuestionPo.get_random_question(
-        subject=subject or 'python',
+        user_id=user_id,
+        subject=subject,
         question_type=question_type,
         difficulty_level=difficulty_level,
         grade=grade,

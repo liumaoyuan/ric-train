@@ -311,7 +311,7 @@ def question_db_init():
     init_question_difficulty_labels()
     init_question_rules()
     # 下面这个比较耗时，可以单独执行，不必初始化的时候执行
-    # init_knowledge_points()
+    init_knowledge_points()
 
 if __name__ == '__main__':
     question_db_init()

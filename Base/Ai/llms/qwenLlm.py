@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, Optional, Generator, List
 
+from Base.Ai.base import SystemMessages, UserMessages
 from Base.Ai.base.baseEnum import LLMTypeEnum
 from Base.Ai.base.baseLlm import BaseLlm
 from Base.Ai.base.baseSetting import DashScopeConfig
@@ -343,6 +344,7 @@ def create_qwen_llm(
 
     return QwenLlm(config=config)
 
+# todo: 此处存在缺陷，任意地方修改参数将影响所有地方，但是实际上流式输出和非流式输出有不同的处理逻辑需要适配
 default_qwen_llm = create_qwen_llm()
 
 def get_default_qwen_llm() -> QwenLlm:
@@ -363,15 +365,18 @@ if __name__ == '__main__':
     for k, v in info.items():
         print(f"{k}: {v}")
 
-    _file_path = r'C:\Users\11243\Desktop\test.m4a'
-    _img_file_path = r'C:\Users\11243\Desktop\test.png'
+    _file_path = r'C:\Ric\Test\test.m4a'
+    _img_file_path = r'C:\Ric\Test\ocr_test.png'
 
-    # res = llm.asr(_file_path)
+    # res = llm.ocr(_img_file_path)
+    # print(res)
+    #
+    # res = llm.ocr(_img_file_path)
     # print(res)
 
-    res = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
-    res1 = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
-    res2 = llm.embedding(text="你是一个有帮助的助手", dimensions=768)
+    # res = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
+    # res1 = llm.embedding(text="你是一个有帮助的助手",dimensions=1024)
+    # res2 = llm.embedding(text="你是一个有帮助的助手", dimensions=768)
 
 
     # res = llm.ocr(img_file_path=_img_file_path)
@@ -397,11 +402,11 @@ if __name__ == '__main__':
     # print(res)
     #
     # # 测试非思考模式（流式）
-    # print("\n=== 测试非思考模式（流式）===")
-    # res = llm.invoke("讲一个笑话", model="qwen-plus", stream=True)
-    # for chunk in res:
-    #     print(chunk, end="")
-    # print()  # 换行
+    print("\n=== 测试非思考模式（流式）===")
+    res = llm.invoke("讲一个笑话", model="qwen-plus", stream=True)
+    for chunk in res:
+        print(chunk, end="")
+    print()  # 换行
     #
     # # 测试对话模式
     # print("\n=== 测试对话模式 ===")

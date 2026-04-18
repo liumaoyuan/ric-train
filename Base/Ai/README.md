@@ -10,19 +10,24 @@
 Base/Ai/
 ├── base/                   # 抽象基类和配置
 │   ├── baseLlm.py          # LLM 抽象基类
-│   ├── baseMessages.py      # 消息封装
+│   ├── baseMessages.py     # 消息封装
 │   ├── baseEnum.py         # 枚举定义
 │   └── baseSetting.py      # LLM 配置类
 ├── llms/                   # 具体模型实现
-│   ├── qwenLlm.py         # 通义千问实现
-│   └── deepseekLlm.py     # DeepSeek 实现
+│   ├── qwenLlm.py          # 通义千问实现（支持 OCR/ASR/Embedding）
+│   └── deepseekLlm.py      # DeepSeek 实现
+├── service/                # 业务服务层
+│   └── commonService.py    # 通用服务（如问题改写）
+├── utils/                  # 工具函数
+│   └── common.py           # 通用工具（如 Jinja2 渲染）
+├── prompt/                 # 提示词模板
+│   └── commonPrompt.py     # 通用提示词模板
 └── __init__.py             # 模块导出
 ```
 
 ## TODO:
 
 * [ ] 持久化调用记录
-* [ ] Emdedding支持引入
 * [ ] 其他国内主流模型子类编写
 * [ ] 记忆支持
 
@@ -91,6 +96,15 @@ BaseLlm (抽象基类)
 - `init_model()`: 初始化模型客户端
 - `context_window`: 上下文窗口大小
 - `supports_streaming`: 是否支持流式输出
+- `supports_embedding`: 是否支持 Embedding
+- `supports_asr`: 是否支持语音识别 (ASR)
+- `supports_ocr`: 是否支持图像识别 (OCR)
+
+**抽象方法**（子类可选实现）：
+
+- `_embedding(text, **kwargs)`: Embedding 向量化
+- `_asr(audio_file_path, **kwargs)`: 语音转文本
+- `_ocr(img_file_path, prompt, **kwargs)`: 图像文字识别
 
 #### 功能特性
 
@@ -190,6 +204,47 @@ developer_msg = DeveloperMessages("请优化以下代码")
 - 类型安全：避免字符串拼写错误
 - 模型识别：用于日志和配置
 
+### service/commonService.py - 业务服务层
+
+提供基于 LLM 的业务服务封装：
+
+**rewrite_question()** - 问题改写服务
+
+```python
+from Base.Ai.service.commonService import rewrite_question, RewriteQuestionParams
+
+# 问题改写（结合上下文和历史信息）
+params = RewriteQuestionParams(
+    question="它的续航怎么样？",
+    similarity="特斯拉 Model Y 的电池续航能力是多少？",
+    history=[{"role": "user", "content": "特斯拉 Model Y 多少钱？"}]
+)
+rewritten = rewrite_question(params)
+# 输出："特斯拉 Model Y 的电池续航能力是多少？"
+```
+
+### utils/common.py - 工具函数
+
+**jinja2_prompt_render()** - Jinja2 模板渲染
+
+```python
+from Base.Ai.utils.common import jinja2_prompt_render
+
+prompt = jinja2_prompt_render(
+    "你好，{{name}}！你今年{{age}}岁。",
+    {"name": "小明", "age": 18}
+)
+# 输出："你好，小明！你今年 18 岁。"
+```
+
+### prompt/commonPrompt.py - 提示词模板
+
+提供预定义的提示词模板：
+
+- `rewrite_question_prompt_v1`: 问题改写提示词
+- `session_summary_prompt_v1`: 会话总结提示词
+- `text_auditing_prompt_v1`: 文本审核提示词
+
 ### llms/qwenLlm.py - 通义千问实现
 
 #### 核心特性
@@ -228,6 +283,44 @@ llm = create_qwen_llm(
     max_tokens=2000
 )
 ```
+
+**4. OCR 功能（图像文字识别）**
+
+```python
+llm = create_qwen_llm()
+
+# OCR 识别图片中的文字
+result = llm.ocr(img_file_path="test.png")
+print(result)  # 输出图片中的文字内容
+
+# 自定义 OCR Prompt
+result = llm.ocr(img_file_path="test.png", prompt="请提取表格中的所有数据")
+```
+
+**5. ASR 功能（语音识别）**
+
+```python
+llm = create_qwen_llm()
+
+# 语音转文字
+result = llm.asr(audio_file_path="test.m4a")
+print(result)  # 输出语音内容
+```
+
+**6. Embedding 功能（文本向量化）**
+
+```python
+llm = create_qwen_llm()
+
+# 文本向量化
+vec = llm.embedding(text="你好，世界", dimensions=1024)
+print(len(vec))  # 输出：1024
+```
+
+**7. 缓存支持**
+
+- OCR、ASR、Embedding 方法内置 Redis 缓存
+- 相同输入自动返回缓存结果，节省 API 调用
 
 ### llms/deepseekLlm.py - DeepSeek 实现
 
@@ -578,6 +671,67 @@ print(f"类型: {info['model_type']}")
 print(f"上下文窗口: {info['context_window']}")
 print(f"支持流式: {info['supports_streaming']}")
 ```
+n### OCR 图像文字识别（Qwen 专属）
+
+```python
+from Base.Ai.llms.qwenLlm import create_qwen_llm
+
+llm = create_qwen_llm()
+
+# 识别图片中的文字
+result = llm.ocr(img_file_path="path/to/image.png")
+print(f"识别结果：{result}")
+
+# 自定义识别任务
+result = llm.ocr(
+    img_file_path="table.png",
+    prompt="请提取表格中的所有数据，保持原有格式"
+)
+```
+
+### ASR 语音识别（Qwen 专属）
+
+```python
+from Base.Ai.llms.qwenLlm import create_qwen_llm
+
+llm = create_qwen_llm()
+
+# 语音转文字
+result = llm.asr(audio_file_path="path/to/audio.m4a")
+print(f"语音内容：{result}")
+```
+
+### Embedding 文本向量化（Qwen 专属）
+
+```python
+from Base.Ai.llms.qwenLlm import create_qwen_llm
+
+llm = create_qwen_llm()
+
+# 文本向量化（1024 维）
+vec = llm.embedding(text="你好，世界", dimensions=1024)
+print(f"向量维度：{len(vec)}")
+
+# 批量向量化
+vecs = llm.embedding(text=["文本 1", "文本 2"], dimensions=1024)
+```
+
+### 问题改写服务
+
+```python
+from Base.Ai.service.commonService import rewrite_question, RewriteQuestionParams
+
+# 结合上下文和历史问题进行改写
+params = RewriteQuestionParams(
+    question="它的续航怎么样？",
+    similarity=[{"question": "特斯拉 Model Y 的电池续航能力是多少？", "score": 0.95}],
+    history=[{"role": "user", "content": "特斯拉 Model Y 多少钱？"}],
+    llm=create_qwen_llm()
+)
+rewritten = rewrite_question(params)
+# 输出："特斯拉 Model Y 的电池续航能力是多少？"
+```
+
 
 ## 高级特性
 
@@ -733,6 +887,14 @@ TypeError: 'str' object is not subscriptable
 
 **解决方案**：确保使用 `enable_thinking=True` 时也设置 `stream=True`
 
+**5. OCR/ASR/Embedding 功能失败**
+
+```
+NotImplementedError: deepseek 模型不支持 OCR
+```
+
+**解决方案**：仅 Qwen 模型支持 OCR/ASR/Embedding 功能
+
 ## 总结
 
 `Base.Ai` 模块通过以下设计实现了高度的可扩展性和二次开发友好性：
@@ -749,6 +911,9 @@ TypeError: 'str' object is not subscriptable
 8. ✅ **异步支持**：同步/异步双支持
 9. ✅ **流式输出**：支持实时内容生成
 10. ✅ **思考过程**：支持展示 AI 推理过程
+11. ✅ **多模态支持**：Qwen 支持 OCR/ASR/Embedding
+12. ✅ **缓存支持**：内置 Redis 缓存，节省 API 调用
+13. ✅ **服务封装**：提供问题改写等业务服务
 
 ### 适用场景
 
