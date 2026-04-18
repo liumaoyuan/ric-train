@@ -32,6 +32,12 @@ def extract_resume(state: IAState):
     """
     if not state.resume_info.resume_path:
         return None
+    try:
+        default_minio_client.upload_file(bucket_name="resumes",
+                                         object_name=state.resume_path + os.path.basename(state.asr_info.audio_path),
+                                         file_path=state.resume_info.resume_path)
+    except Exception as e:
+        logger.error(f"{state.api_params.user_name} 简历 文件上传 MinIO时发生异常 ：{e}")
     resume_content = extract_pdf_text(state.resume_info.resume_path)
     resume_infos = default_qwen_llm.chat([SystemMessages(RESUME_JSON_EXTRACT_PROMPT), UserMessages(resume_content)])
     resume_info_json = json.loads(resume_infos)
@@ -60,6 +66,12 @@ def audio_handle(state: IAState):
     :param state:
     :return:
     """
+    try:
+        default_minio_client.upload_file(bucket_name="audios",
+                                         object_name=state.audio_path,
+                                         file_path=state.asr_info.audio_path)
+    except Exception as e:
+        logger.error(f"{state.api_params.user_name}Audio 文件上传 MinIO时发生异常 ：{e}")
     # 音频文件转文本碎片
     ordered_results = audio_file_2_text_with_cache(state.asr_info.audio_path)
 
@@ -71,6 +83,13 @@ def audio_handle(state: IAState):
 
     # 合并碎片文本
     combine_text = get_combine_text(str_hash_code=short_unique_hash(str(ordered_results)))
+
+    try:
+        default_minio_client.str_list_2_minio(str_list=combine_text,
+                                              bucket_name='audio-text',
+                                              object_name=state.audio_text_path)
+    except Exception as e:
+        logger.error(f"{state.api_params.user_name}Audio-Text 文件上传 MinIO时发生异常 ：{e}")
     state.asr_info.audio_text = combine_text
     return {'asr_info': {"audio_text": combine_text}}
 
@@ -111,7 +130,7 @@ def get_qa_pair(state: IAState):
     """
     res = default_qwen_llm.chat([SystemMessages(CORE_QA_EXTRACT_PROMPT), UserMessages(state.asr_info.audio_text)])
     res = json.loads(res)
-    return {"asr_info": {"qa_pairs": res}}
+    return {"asr_info": {"qa_pairs": res,"audio_text": state.asr_info.audio_text}}
 
 
 @graph_node
@@ -181,7 +200,7 @@ def generate_report(state: IAState):
                                          object_name=state.minio_path,
                                          file_path=output_path)
     except Exception as e:
-        logger.error(f"报告MinIO存储失败：{e}")
+        logger.error(f"{state.api_params.user_name}报告MinIO存储失败：{e}")
 
     try:
         uuid_str = str(uuid.uuid4())

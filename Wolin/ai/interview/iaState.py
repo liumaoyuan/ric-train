@@ -75,6 +75,16 @@ class IAState(BaseState):
 
     @property
     def minio_path(self):
-        return f'{self.api_params.user_name}/{self.api_params.company_name}.docx'
+        return f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.docx'
 
+    @property
+    def audio_path(self):
+        return f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.m4a'
 
+    @property
+    def audio_text_path(self):
+        return f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.txt'
+
+    @property
+    def resume_path(self):
+        return f'{self.api_params.user_name}/'

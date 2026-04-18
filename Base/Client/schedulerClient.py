@@ -155,6 +155,9 @@ class TaskSchedulerClient:
         def decorator(func: Callable) -> Callable:
             job_id = id or func.__name__
             self.add_job(func, trigger=trigger, id=job_id, **trigger_args)
+            # 设置 __wrapped__ 和 scheduled 属性，让 auto_register 能够识别
+            func.__wrapped__ = func
+            func.scheduled = {'id': job_id, 'trigger': trigger, **trigger_args}
             return func
 
         return decorator

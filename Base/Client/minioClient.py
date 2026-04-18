@@ -175,10 +175,12 @@ class MinioClient(metaclass=SingletonMeta):
             logger.error(f"[!] 获取对象信息失败: {e}")
             return None
 
-    def str_list_2_minio(self, str_list: list[str], bucket_name: str, object_name: str):
+    def str_list_2_minio(self, str_list: list[str] | str, bucket_name: str, object_name: str):
         """
         write the str_list to minIO
         """
+        if isinstance(str_list,str):
+            str_list = [str_list]
         temp_file_path = ''
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as tmp_file:
             # 写入每行（添加换行符）
