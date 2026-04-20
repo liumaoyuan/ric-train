@@ -283,6 +283,20 @@ class BaseModuleSettings(BaseEnvSettings):
     )
 
 # =========================
+# Neo4j
+# =========================
+class Neo4jSettings(BaseEnvSettings):
+    uri: Optional[str] = "bolt://localhost:7687"
+    user: Optional[str] = "neo4j"
+    password: Optional[str] = None
+    database: Optional[str] = "neo4j"
+
+    model_config = SettingsConfigDict(
+        env_prefix="NEO4J_",
+        extra="ignore",
+    )
+
+# =========================
 # App Settings
 # =========================
 class Settings(BaseEnvSettings):
@@ -305,6 +319,7 @@ class Settings(BaseEnvSettings):
     milvus: MilvusSettings = Field(default_factory=MilvusSettings)
     tencent_cos: TencentCOSSettings = Field(default_factory=TencentCOSSettings)
     base_module: BaseModuleSettings = Field(default_factory=BaseModuleSettings)
+    neo4j: Neo4jSettings = Field(default_factory=Neo4jSettings)
 
     # 覆盖 extra="ignore" 以避免加载未知的环境变量
     model_config = SettingsConfigDict(
