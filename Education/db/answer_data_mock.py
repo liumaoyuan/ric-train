@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from Base.Ai.llms.qwenLlm import get_default_qwen_llm
 from Base.Ai.base import UserMessages
+from Education.models.pojo.questionPo import QuestionPo
 
 logger = logging.getLogger(__name__)
 
@@ -27,26 +28,43 @@ def _generate_single_record(_) -> Dict:
     """
     llm = get_default_qwen_llm()
 
-    # 基础数据池
-    question_ids = [
-        "q_uuid_001", "q_uuid_002", "q_uuid_003", "q_uuid_004", "q_uuid_005",
-        "q_uuid_006", "q_uuid_007", "q_uuid_008", "q_uuid_009", "q_uuid_010"
-    ]
-    user_ids = [
-        "user_001", "user_002", "user_003", "user_004", "user_005",
-        "user_006", "user_007", "user_008", "user_009", "user_010"
-    ]
-    sources = ["daily_question", "exam", "homework", "practice"]
-    question_types = ["single_choice", "multiple_choice", "fill_blank", "short_answer"]
-    answer_pool = {
-        "single_choice": ["A", "B", "C", "D"],
-        "multiple_choice": ["AB", "AC", "ABC", "ABCD", "BCD"],
-        "fill_blank": ["答案是 42", "结果为 100", "等于π", "x=5"],
-        "short_answer": ["因为根据勾股定理...", "主要原因是...", "解：设 x 为未知数..."]
-    }
+    # 先从数据库随机查询一条真实题目
+    question = QuestionPo.get_random_question()
+    if question is None:
+        logger.warning("数据库中无可用题目，使用默认配置")
+        question = None
 
-    # 使用 LLM 生成单条数据的核心信息
-    prompt = """请生成 1 条学生答题记录数据，包含：
+    user_id = f"user_{random.randint(0, 999):03d}"
+    sources = ["daily_question", "exam", "homework", "practice"]
+
+    if question:
+        # 使用真实题目生成答题记录
+        prompt = f"""请根据以下真实题目，生成一条学生答题记录数据。
+
+题目信息：
+- 题目ID: {question.id}
+- 题目UUID: {question.question_uuid}
+- 题干: {question.question_text}
+- 题型: {question.question_type}
+- 科目: {question.subject}
+- 年级: {question.grade}
+- 难度等级: {question.difficulty_level}
+- 标准答案: {question.answer}
+- 知识点: {question.knowledge_points}
+
+请生成：
+1. 用户答案（符合题型和题目内容，不一定都要正确）
+2. 得分率 (0-1，要有变化)
+3. AI 判题置信度 (0.7-0.99)
+4. AI 判题简要评语
+
+请以 JSON 格式返回：
+{{"question_id": {question.id}, "question_uuid": "{question.question_uuid}", "question_type": "{question.question_type}", "user_answer": "学生答案", "score": 0.8, "ai_confidence": 0.95, "ai_comment": "判题评语"}}
+"""
+    else:
+        # 无真实题目时的降级方案
+        question_types = ["single_choice", "multiple_choice", "fill_blank", "short_answer"]
+        prompt = """请生成 1 条学生答题记录数据，包含：
 1. 题目类型（single_choice/multiple_choice/fill_blank/short_answer）
 2. 用户答案（符合题型）
 3. 得分率 (0-1，要有变化)
@@ -74,16 +92,36 @@ def _generate_single_record(_) -> Dict:
         result = json.loads(response)
     except (json.JSONDecodeError, Exception) as e:
         logger.debug(f"LLM 生成失败，使用备用方案：{e}")
-        result = {
-            "question_type": random.choice(question_types),
-            "user_answer": "A",
-            "score": random.choice([0, 0.5, 0.7, 0.8, 1.0]),
-            "ai_confidence": round(random.uniform(0.75, 0.99), 2),
-            "ai_comment": "备用数据"
-        }
+        if question:
+            result = {
+                "question_id": question.id,
+                "question_uuid": question.question_uuid,
+                "question_type": question.question_type,
+                "user_answer": "A",
+                "score": random.choice([0, 0.5, 0.7, 0.8, 1.0]),
+                "ai_confidence": round(random.uniform(0.75, 0.99), 2),
+                "ai_comment": "备用数据"
+            }
+        else:
+            question_types = ["single_choice", "multiple_choice", "fill_blank", "short_answer"]
+            result = {
+                "question_type": random.choice(question_types),
+                "user_answer": "A",
+                "score": random.choice([0, 0.5, 0.7, 0.8, 1.0]),
+                "ai_confidence": round(random.uniform(0.75, 0.99), 2),
+                "ai_comment": "备用数据"
+            }
 
     # 构建完整记录
-    question_type = result.get("question_type", "single_choice")
+    if question:
+        question_id = result.get("question_id", question.id)
+        question_uuid = result.get("question_uuid", question.question_uuid)
+        question_type = result.get("question_type", question.question_type)
+    else:
+        question_id = None
+        question_uuid = None
+        question_type = result.get("question_type", "single_choice")
+
     base_time = datetime.now()
     random_hours = random.randint(0, 168)
     created_at = base_time - timedelta(hours=random_hours)
@@ -96,9 +134,10 @@ def _generate_single_record(_) -> Dict:
     }
 
     record = {
-        "question_id": random.choice(question_ids),
-        "user_id": random.choice(user_ids),
-        "user_answer": result.get("user_answer", random.choice(answer_pool[question_type])),
+        "question_id": question_id,
+        "question_uuid": question_uuid,
+        "user_id": user_id,
+        "user_answer": result.get("user_answer", "A"),
         "score": float(result.get("score", 1.0)),
         "ai_model": "qwen-max" if random.random() > 0.3 else None,
         "ai_prompt": f"请判断以下{question_type}的答案是否正确。",
@@ -204,4 +243,4 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    create_and_insert_mock_answers(num=250,max_workers=50)
+    create_and_insert_mock_answers(num=5,max_workers=50)
