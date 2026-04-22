@@ -2,8 +2,10 @@ import logging
 import os
 import subprocess
 import tempfile
+import threading
 import uuid
 import base64
+import glob
 from functools import lru_cache
 
 from Base.Config.setting import settings
@@ -173,6 +175,7 @@ class AudioFileHandler:
                 output_filename
             ], check=True)
             logger.info(f"✅ 已保存：{output_filename}")
+            AudioFileHandler.schedule_cleanup(output_filename)
             return output_filename
         except subprocess.CalledProcessError as e:
             logger.info(f"❌ 格式转换失败：{e}")
@@ -266,6 +269,49 @@ class AudioFileHandler:
         return segments
 
 
+    @staticmethod
+    def schedule_cleanup(filepath: str, delay: int = 600):
+        """
+        延迟销毁文件，默认5分钟后自动删除
+        :param filepath: 文件路径
+        :param delay: 延迟时间（秒），默认600秒（10分钟）
+        """
+        def _remove():
+            try:
+                if os.path.isfile(filepath):
+                    os.remove(filepath)
+                    logger.info(f"🗑️ 已自动清理临时16k文件：{filepath}")
+                else:
+                    logger.debug(f"文件已不存在，跳过清理：{filepath}")
+            except Exception as e:
+                logger.warning(f"清理临时文件失败：{filepath} -> {e}")
+        timer = threading.Timer(delay, _remove)
+        timer.daemon = True
+        timer.start()
+
+    @staticmethod
+    def cleanup_stale_16k_files(target_dir: str = None):
+        """
+        系统启动时清理残留的16k.wav文件
+        :param target_dir: 目标目录，默认为系统临时目录
+        :return: 清理的文件数量
+        """
+        if target_dir is None:
+            target_dir = tempfile.gettempdir()
+        pattern = os.path.join(target_dir, "*16k.wav")
+        files = glob.glob(pattern)
+        count = 0
+        for f in files:
+            try:
+                os.remove(f)
+                logger.info(f"🗑️ 清理残留文件：{f}")
+                count += 1
+            except Exception as e:
+                logger.warning(f"清理失败：{f} -> {e}")
+        logger.info(f"启动清理完成，共删除 {count} 个残留16k.wav文件")
+        return count
+
+AudioFileHandler.cleanup_stale_16k_files()
 # =============================
 # 使用示例
 # =============================
