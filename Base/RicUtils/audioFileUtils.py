@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 import threading
+import time
 import uuid
 import base64
 import glob
@@ -117,7 +118,7 @@ class AudioFileHandler:
                 '-c', 'copy',  # 直接复制流，不重新编码
                 '-y',  # 覆盖输出文件
                 output_filename
-            ], check=True)
+            ], check=True, close_fds=True)
             logger.info(f"✅ 已保存：{output_filename}")
             return output_filename
         except subprocess.CalledProcessError as e:
@@ -173,9 +174,11 @@ class AudioFileHandler:
                 '-acodec', 'pcm_s16le',
                 '-y',  # 覆盖输出文件
                 output_filename
-            ], check=True)
+            ], check=True, close_fds=True)
+            # Windows 下确保 ffmpeg 进程完全退出并释放文件句柄
+            if os.name == 'nt':
+                time.sleep(0.1)
             logger.info(f"✅ 已保存：{output_filename}")
-            AudioFileHandler.schedule_cleanup(output_filename)
             return output_filename
         except subprocess.CalledProcessError as e:
             logger.info(f"❌ 格式转换失败：{e}")
@@ -204,10 +207,15 @@ class AudioFileHandler:
             list[str]: 切割后切块文件路径列表， 如果为空则代表未切割
         """
         # 格式转换为16kHz、16-bit、单声道WAV文件
+        converted_path = None
         if output_format == "wav":
-            input_audio_path = self.sample_fmt(input_audio_path)
+            converted_path = self.sample_fmt(input_audio_path)
+            input_audio_path = converted_path
         # 获取音频时长
         duration_sec = AudioFileHandler.get_audio_duration(input_audio_path=input_audio_path)
+        # Windows 上 ffprobe 可能未立即释放文件句柄，短暂等待避免后续 ffmpeg 冲突
+        if os.name == 'nt':
+            time.sleep(0.1)
         logger.info(f"音频总时长：{duration_sec:.2f} 秒")
 
         segments = []
@@ -216,6 +224,9 @@ class AudioFileHandler:
 
         if duration_sec < max_segment_duration:
             logger.info(f"音频时长小于最大分段时长，不进行切割")
+            # 临时转换文件用完后安排清理
+            if converted_path:
+                AudioFileHandler.schedule_cleanup(converted_path)
             return [input_audio_path]
 
         while current_start < duration_sec:
@@ -265,6 +276,9 @@ class AudioFileHandler:
 
             segment_index += 1
 
+        # 临时转换文件用完后安排清理
+        if converted_path:
+            AudioFileHandler.schedule_cleanup(converted_path)
         logger.info(f"\n🎉 全部切割完成，共生成 {segment_index} 个音频片段，保存在目录：{output_dir}")
         return segments
 

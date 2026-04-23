@@ -150,11 +150,6 @@
             border: 1px solid #f5c6cb;
         }
 
-        .optional-text {
-            font-size: 12px;
-            color: #6c757d;
-            font-style: italic;
-        }
     </style>
 </head>
 <body>
@@ -180,7 +175,7 @@
             <div class="form-group">
                 <label for="audio_file">音频文件 *</label>
                 <div class="file-input-wrapper">
-                    <input type="file" id="audio_file" name="audio_file" class="file-input" accept="audio/*" required>
+                    <input type="file" id="audio_file" name="audio_file" class="file-input" accept="audio/*">
                     <label for="audio_file" class="file-input-label" id="audio_label">
                         点击选择音频文件 (支持 mp3, wav, m4a等)
                     </label>
@@ -188,7 +183,7 @@
             </div>
 
             <div class="form-group">
-                <label for="resume_file">简历文件 <span class="optional-text">(可选)</span></label>
+                <label for="resume_file">简历文件 *</label>
                 <div class="file-input-wrapper">
                     <input type="file" id="resume_file" name="resume_file" class="file-input" accept=".pdf,.doc,.docx">
                     <label for="resume_file" class="file-input-label" id="resume_label">
@@ -233,6 +228,17 @@
             }
         });
 
+        // 验证文本不能是纯英文（必须包含中文或其他非英文字母字符）
+        function validateNotPureEnglish(text, fieldName) {
+            const trimmed = text.trim();
+            if (!trimmed) return null; // 不检查空值，由 required 属性处理
+            // 如果全部由英文字母组成且不含中文，则拒绝
+            if (/^[a-zA-Z\s]+$/.test(trimmed)) {
+                return `${fieldName} 不能为纯英文，请输入中文或其他语言`;
+            }
+            return null;
+        }
+
         // 表单提交处理
         document.getElementById('interviewForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -251,14 +257,31 @@
             const resumeFile = document.getElementById('resume_file').files[0];
 
             if (!audioFile) {
-                showResult('请选择音频文件', 'error');
+                alert('请选择音频文件');
+                return;
+            }
+
+            if (!resumeFile) {
+                alert('请选择简历文件');
+                return;
+            }
+
+            // 验证姓名和公司不能是纯英文
+            const userName = document.getElementById('user_name').value;
+            const companyName = document.getElementById('company_name').value;
+            const nameError = validateNotPureEnglish(userName, '用户名');
+            if (nameError) {
+                showResult(nameError, 'error');
+                return;
+            }
+            const companyError = validateNotPureEnglish(companyName, '公司名称');
+            if (companyError) {
+                showResult(companyError, 'error');
                 return;
             }
 
             formData.append('audio_file', audioFile);
-            if (resumeFile) {
-                formData.append('resume_file', resumeFile);
-            }
+            formData.append('resume_file', resumeFile);
 
             // 显示加载状态
             submitBtn.disabled = true;
