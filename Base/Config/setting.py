@@ -297,6 +297,18 @@ class Neo4jSettings(BaseEnvSettings):
     )
 
 # =========================
+# TTS
+# =========================
+class TtsSettings(BaseEnvSettings):
+    server_url: Optional[str] = "http://47.115.57.130:50000/"
+    bucket_name: Optional[str] = "tts-audio-cache"
+
+    model_config = SettingsConfigDict(
+        env_prefix="TTS_",
+        extra="ignore",
+    )
+
+# =========================
 # App Settings
 # =========================
 class Settings(BaseEnvSettings):
@@ -320,6 +332,7 @@ class Settings(BaseEnvSettings):
     tencent_cos: TencentCOSSettings = Field(default_factory=TencentCOSSettings)
     base_module: BaseModuleSettings = Field(default_factory=BaseModuleSettings)
     neo4j: Neo4jSettings = Field(default_factory=Neo4jSettings)
+    tts: TtsSettings = Field(default_factory=TtsSettings)
 
     # 覆盖 extra="ignore" 以避免加载未知的环境变量
     model_config = SettingsConfigDict(

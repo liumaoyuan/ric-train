@@ -1,6 +1,7 @@
 from Base.Client.asrClient import asr_client
 from Base.Client.minioClient import async_minio_client, default_minio_client
 from Base.Client.redisClient import redis_client
+from Base.Client.ttsClient import TtsClient
 
 
 def get_asr_client():
@@ -14,4 +15,8 @@ def get_redis_client():
     return redis_client
 
 
-__all__ = ["get_asr_client", "get_minio_client", "get_redis_client"]
+def get_tts_client():
+    return TtsClient()
+
+
+__all__ = ["get_asr_client", "get_minio_client", "get_redis_client", "get_tts_client"]
