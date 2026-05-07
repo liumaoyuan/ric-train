@@ -334,7 +334,7 @@ if __name__ == "__main__":
     # 检查 ffmpeg 是否可用
 
     # 音频文件路径
-    input_file = r"C:\Users\11243\Desktop\华为线下面试录音.mp3"
+    input_file = r"C:\Users\13061\Desktop\布澜路19号 3.m4a"
 
     # 切割后的音频保存目录
     output_folder = "split_audio_output"
@@ -347,7 +347,8 @@ if __name__ == "__main__":
     # 格式转换
     # handler.sample_fmt(input_audio_path=input_file)
 
-    paths = handler.split_audio_with_overlap_ffmpeg(
-        input_audio_path=input_file,
-    )
+    # paths = handler.split_audio_with_overlap_ffmpeg(
+    #     input_audio_path=input_file,
+    # )
+    paths = handler.sample_fmt(input_audio_path=input_file)
     print(paths)

@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, UploadFile, File, Form, Response
 
+from Base.Ai.llms.qwenLlm import get_default_qwen_llm
 from Base.RicUtils.fileUtils import save_upload_file_to_temp
 from Base.RicUtils.httpUtils import HttpResponse
 from Wolin.ai.interview.iaState import IAState, ApiParams
@@ -77,3 +78,19 @@ async def audio_2_text_api(audio_file: UploadFile = File(...),):
         media_type="text/plain",
         headers=headers
     )
+
+
+@router.post("/audio_to_text")
+async def audio_to_text(audio_file: UploadFile = File(...)):
+    """接收录音文件，调用 Qwen ASR 返回识别文字。"""
+    audio_file_path = await save_upload_file_to_temp(audio_file, use_original_filename=True)
+    try:
+        llm = get_default_qwen_llm()
+        text = llm.asr(audio_file_path)
+        return HttpResponse.ok(data={"text": text or ""}, msg="识别成功")
+    except Exception as e:
+        logger.error(f"audio_to_text 失败: {e}", stack_info=True)
+        return HttpResponse.error(msg=f"识别失败: {str(e)}")
+    finally:
+        if audio_file_path and os.path.exists(audio_file_path):
+            os.unlink(audio_file_path)

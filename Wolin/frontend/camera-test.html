@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模拟面试 - 摄像头与语音识别</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            color: #1a1a2e;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .main-layout {
+            display: flex;
+            gap: 24px;
+            width: 100%;
+            max-width: 1100px;
+            align-items: flex-start;
+        }
+
+        .video-panel {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .video-container {
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            aspect-ratio: 4 / 3;
+            position: relative;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #888;
+            gap: 12px;
+        }
+
+        .placeholder svg {
+            width: 64px;
+            height: 64px;
+            opacity: 0.5;
+        }
+
+        .controls {
+            margin-top: 16px;
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s, opacity 0.2s;
+        }
+
+        #startBtn {
+            background: #4361ee;
+            color: #fff;
+        }
+
+        #startBtn:hover:not(:disabled) {
+            background: #3a56d4;
+        }
+
+        #stopBtn {
+            background: #e63946;
+            color: #fff;
+        }
+
+        #stopBtn:hover:not(:disabled) {
+            background: #c5303c;
+        }
+
+        #recordBtn {
+            background: #e63946;
+            color: #fff;
+            flex: 1;
+            padding: 14px 24px;
+            font-size: 15px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #recordBtn.recording {
+            animation: pulse 1.2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 12px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status.recording {
+            background: #f8d7da;
+            color: #721c24;
+            font-weight: 600;
+        }
+
+        /* Right panel - transcription */
+        .text-panel {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .text-panel h2 {
+            color: #1a1a2e;
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+
+        .transcript-box {
+            background: #fff;
+            border: 1px solid #dde1e6;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            padding: 16px;
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .transcript-entry {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .transcript-entry:last-child {
+            border-bottom: none;
+        }
+
+        .transcript-entry .timestamp {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 4px;
+        }
+
+        .transcript-placeholder {
+            color: #aaa;
+            text-align: center;
+            padding: 60px 20px;
+            font-size: 14px;
+        }
+
+        .camera-status {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <h1>模拟面试</h1>
+    <p class="subtitle">摄像头画面与语音识别</p>
+
+    <div class="main-layout">
+        <!-- Left: Camera -->
+        <div class="video-panel">
+            <div class="video-container">
+                <video id="video" autoplay playsinline muted></video>
+                <div class="placeholder" id="placeholder">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                              d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5
+                              18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0
+                              002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/>
+                    </svg>
+                    <span>点击下方按钮启动摄像头</span>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="startBtn">启动摄像头</button>
+                <button id="stopBtn" disabled>停止摄像头</button>
+            </div>
+            <div class="status info" id="status">等待操作...</div>
+
+            <div style="margin-top: 20px;">
+                <button id="recordBtn" disabled>按住录音</button>
+            </div>
+            <div class="status info" id="asrStatus" style="display:none;"></div>
+        </div>
+
+        <!-- Right: Transcript -->
+        <div class="text-panel">
+            <h2>识别结果</h2>
+            <div class="transcript-box" id="transcriptBox">
+                <div class="transcript-placeholder">按住录音按钮说话，识别结果将显示在这里。</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const placeholder = document.getElementById('placeholder');
+        const status = document.getElementById('status');
+        const recordBtn = document.getElementById('recordBtn');
+        const asrStatus = document.getElementById('asrStatus');
+        const transcriptBox = document.getElementById('transcriptBox');
+
+        let camStream = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+
+        function setStatus(msg, type = 'info') {
+            status.textContent = msg;
+            status.className = 'status ' + type;
+        }
+
+        function setAsrStatus(msg, type = 'info') {
+            asrStatus.textContent = msg;
+            asrStatus.className = 'status ' + type;
+            asrStatus.style.display = msg ? 'block' : 'none';
+        }
+
+        function appendTranscript(text) {
+            const ph = transcriptBox.querySelector('.transcript-placeholder');
+            if (ph) ph.remove();
+
+            const entry = document.createElement('div');
+            entry.className = 'transcript-entry';
+            const now = new Date();
+            const ts = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            entry.innerHTML = `<div class="timestamp">${ts}</div><div>${escapeHtml(text)}</div>`;
+            transcriptBox.appendChild(entry);
+            transcriptBox.scrollTop = transcriptBox.scrollHeight;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        async function startCamera() {
+            try {
+                setStatus('正在请求摄像头权限...', 'info');
+                camStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+                    audio: true
+                });
+                video.srcObject = camStream;
+                placeholder.style.display = 'none';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                recordBtn.disabled = false;
+                setStatus('摄像头已启动，画面与音频正常。', 'success');
+            } catch (err) {
+                console.error('摄像头访问失败:', err);
+                let msg = '摄像头访问失败';
+                if (err.name === 'NotAllowedError') {
+                    msg = '权限被拒绝，请在浏览器地址栏允许摄像头和麦克风访问。';
+                } else if (err.name === 'NotFoundError') {
+                    msg = '未检测到摄像头设备。';
+                } else if (err.name === 'NotReadableError') {
+                    msg = '摄像头被其他程序占用，请关闭后重试。';
+                }
+                setStatus(msg, 'error');
+            }
+        }
+
+        function stopCamera() {
+            if (camStream) {
+                camStream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                camStream = null;
+                placeholder.style.display = 'flex';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                recordBtn.disabled = true;
+                setStatus('摄像头已停止。', 'info');
+            }
+        }
+
+        function startRecording() {
+            if (!camStream) return;
+            audioChunks = [];
+            const audioTrack = camStream.getAudioTracks()[0];
+            if (!audioTrack) {
+                setAsrStatus('未检测到音频轨道，请确认浏览器已允许麦克风。', 'error');
+                return;
+            }
+            const audioStream = new MediaStream([audioTrack]);
+            mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunks.push(e.data);
+            };
+            mediaRecorder.onstop = sendToAsr;
+            mediaRecorder.start();
+            recordBtn.textContent = '松开结束录音';
+            recordBtn.classList.add('recording');
+            setAsrStatus('录音中...', 'recording');
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                recordBtn.classList.remove('recording');
+                recordBtn.textContent = '识别中...';
+                recordBtn.disabled = true;
+            }
+        }
+
+        async function sendToAsr() {
+            if (audioChunks.length === 0) {
+                recordBtn.textContent = '按住录音';
+                recordBtn.disabled = false;
+                setAsrStatus('未录到音频数据。', 'error');
+                return;
+            }
+
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+            const formData = new FormData();
+            const uniqueName = 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.webm';
+            formData.append('audio_file', blob, uniqueName);
+
+            try {
+                const response = await fetch('/interview/audio_to_text', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.data && data.data.text) {
+                    appendTranscript(data.data.text);
+                    setAsrStatus('识别完成。', 'success');
+                    setTimeout(() => setAsrStatus('', 'info'), 2000);
+                } else {
+                    setAsrStatus('识别失败: ' + (data.msg || '未知错误'), 'error');
+                }
+            } catch (error) {
+                console.error('ASR 请求失败:', error);
+                setAsrStatus('网络错误，无法连接 ASR 服务。', 'error');
+            } finally {
+                recordBtn.textContent = '按住录音';
+                recordBtn.disabled = false;
+            }
+        }
+
+        // 按住录音：mousedown/touchstart 开始，mouseup/touchend 停止
+        recordBtn.addEventListener('mousedown', startRecording);
+        recordBtn.addEventListener('mouseup', stopRecording);
+        recordBtn.addEventListener('mouseleave', stopRecording);
+        recordBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
+        recordBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });
+
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+    </script>
+</body>
+</html>

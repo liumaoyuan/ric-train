@@ -18,3 +18,13 @@ def frontend_init(app : FastAPI):
     async def interview_upload_page(request: Request):
         """面试分析上传页面"""
         return templates.TemplateResponse("interviewAnalysis.html", {"request": request})
+
+    @app.get("/camera-test", response_class=HTMLResponse)
+    async def camera_test_page(request: Request):
+        """摄像头测试页面"""
+        return templates.TemplateResponse("camera-test.html", {"request": request})
+
+    @app.get("/interview-chat", response_class=HTMLResponse)
+    async def interview_chat_page(request: Request):
+        """模拟面试对话页面"""
+        return templates.TemplateResponse("interviewChat.html", {"request": request})
