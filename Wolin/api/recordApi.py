@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Form, Query
 
+from Base.Client.minioClient import default_minio_client
 from Base.RicUtils.httpUtils import HttpResponse
 from Wolin.models.po.interviewRecordPo import InterviewRecordPo
 
@@ -144,6 +145,66 @@ async def delete_record(record_id: int):
     except Exception as e:
         logger.error(f"delete_record 失败：{e}", exc_info=True)
         return HttpResponse.error(msg=f"删除失败：{str(e)}")
+
+
+@router.get("/record/{record_id}/download-url")
+async def get_download_urls(record_id: int):
+    try:
+        record = InterviewRecordPo.get_by_id(record_id)
+        if not record:
+            return HttpResponse.error(msg="记录不存在")
+
+        files = {}
+
+        # 音频：按代码中的路径规则推导 audios/{user_name}/{user_name}_{company_name}.m4a
+        if record.user_name and record.company_name:
+            audio_path = f"{record.user_name}/{record.user_name}_{record.company_name}.m4a"
+            if default_minio_client.stat_object('audios', audio_path):
+                url = default_minio_client.get_presigned_url('audios', audio_path, expiry_hours=2)
+                if url:
+                    files['audio'] = {'url': url, 'label': f'{record.user_name}_{record.company_name}.m4a'}
+
+        # 音频文本：audio-text/{user_name}/{user_name}_{company_name}.txt
+        if record.user_name and record.company_name:
+            text_path = f"{record.user_name}/{record.user_name}_{record.company_name}.txt"
+            if default_minio_client.stat_object('audio-text', text_path):
+                url = default_minio_client.get_presigned_url('audio-text', text_path, expiry_hours=2)
+                if url:
+                    files['text'] = {'url': url, 'label': f'{record.user_name}_{record.company_name}.txt'}
+
+        # 面试报告：interview-report/{user_name}/{user_name}_{company_name}.docx
+        if record.user_name and record.company_name:
+            report_path = f"{record.user_name}/{record.user_name}_{record.company_name}.docx"
+            if default_minio_client.stat_object('interview-report', report_path):
+                url = default_minio_client.get_presigned_url('interview-report', report_path, expiry_hours=2)
+                if url:
+                    files['report'] = {'url': url, 'label': f'{record.user_name}_{record.company_name}.docx'}
+
+        # 简历：resumes 桶路径不规则，列出该用户文件夹下的所有 pdf/docx 文件
+        if record.user_name:
+            resume_prefix = f"{record.user_name}/"
+            objects = default_minio_client.client.list_objects('resumes', prefix=resume_prefix, recursive=True)
+            for obj in objects:
+                name = obj.object_name
+                if name.endswith(('.pdf', '.docx')):
+                    url = default_minio_client.get_presigned_url('resumes', name, expiry_hours=2)
+                    if url:
+                        # 用原始文件名作为 label
+                        import os
+                        label = os.path.basename(name)
+                        # 如果有多个简历，加序号区分
+                        key = 'resume'
+                        if key in files:
+                            i = 1
+                            while f'resume_{i}' in files:
+                                i += 1
+                            key = f'resume_{i}'
+                        files[key] = {'url': url, 'label': label}
+
+        return HttpResponse.ok(data=files)
+    except Exception as e:
+        logger.error(f"get_download_urls 失败：{e}", exc_info=True)
+        return HttpResponse.error(msg=f"获取下载链接失败：{str(e)}")
 
 
 # ── 分页+条件查询 ──────────────────────────────────────────

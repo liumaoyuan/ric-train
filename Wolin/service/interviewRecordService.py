@@ -99,12 +99,13 @@ class InterviewRecordService:
 
             # 2. 更新 ASR 信息
             if state.asr_info:
-                if state.asr_info.audio_path:
-                    update_data['audio_file_path'] = state.asr_info.audio_path
+                # 存储 MinIO 对象路径（不是本地临时路径）
+                if getattr(state, 'audio_path', None):
+                    update_data['audio_file_path'] = state.audio_path
                 if state.asr_info.audio_text:
                     update_data['audio_text'] = state.asr_info.audio_text
                     logger.info(f"更新 audio_text，长度：{len(state.asr_info.audio_text)}")
-                if hasattr(state, 'audio_text_path') and state.audio_text_path:
+                if getattr(state, 'audio_text_path', None):
                     update_data['audio_text_path'] = state.audio_text_path
                 if state.asr_info.qa_pairs:
                     update_data['qa_pairs'] = json.dumps(state.asr_info.qa_pairs, ensure_ascii=False)
@@ -114,8 +115,11 @@ class InterviewRecordService:
                 resume_data = state.resume_info.model_dump(exclude_none=True)
                 if resume_data:
                     update_data['resume_info'] = json.dumps(resume_data, ensure_ascii=False)
-                if state.resume_info.resume_path:
-                    update_data['resume_file_path'] = state.resume_info.resume_path
+                # 存储 MinIO 对象路径（同 upload_file 的 object_name）
+                if getattr(state, 'resume_path', None):
+                    resume_minio_name = state.resume_path + state.audio_path.split('/')[-1] if state.audio_path else None
+                    if resume_minio_name:
+                        update_data['resume_file_path'] = resume_minio_name
 
             # 4. 更新报告信息
             if state.report:
@@ -133,6 +137,9 @@ class InterviewRecordService:
                     update_data['self_evaluation'] = state.report.self_evaluation
                 if state.report.analysis_end:
                     update_data['analysis_end'] = state.report.analysis_end
+                # 存储 MinIO 报告路径
+                if getattr(state, 'minio_path', None):
+                    update_data['report_file_path'] = state.minio_path
 
             # 5. 更新状态和错误信息
             if status:

@@ -318,6 +318,44 @@
             white-space: pre-wrap;
         }
 
+        /* 文件下载区域 */
+        .file-download-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 18px;
+        }
+        .file-download-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .file-download-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .file-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            background: #fff;
+            color: #667eea;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .file-btn:hover {
+            background: #667eea;
+            color: #fff;
+        }
+
         /* 空状态 & 加载 */
         .empty-state {
             text-align: center;
@@ -468,6 +506,11 @@
     <div class="modal-overlay" id="detail_modal">
         <div class="modal">
             <h2 class="modal-title">记录详情</h2>
+            <!-- 文件下载区域 -->
+            <div class="file-download-section" id="file_download_section" style="display:none;">
+                <div class="file-download-title">📎 文件下载</div>
+                <div class="file-download-buttons" id="file_download_buttons"></div>
+            </div>
             <div id="detail_content"></div>
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="document.getElementById('detail_modal').classList.remove('active')">关闭</button>
@@ -725,13 +768,53 @@
 
         async function viewDetail(id) {
             try {
-                const res = await fetch(`/interview/record/${id}`);
-                const json = await res.json();
-                if (json.status_code !== 200 || !json.data) {
-                    alert('获取详情失败：' + (json.msg || ''));
+                // 并行获取详情数据和下载链接
+                const [detailRes, downloadRes] = await Promise.all([
+                    fetch(`/interview/record/${id}`),
+                    fetch(`/interview/record/${id}/download-url`),
+                ]);
+                const detailJson = await detailRes.json();
+                const downloadJson = await downloadRes.json();
+
+                if (detailJson.status_code !== 200 || !detailJson.data) {
+                    alert('获取详情失败：' + (detailJson.msg || ''));
                     return;
                 }
-                const d = json.data;
+                const d = detailJson.data;
+
+                // 渲染文件下载按钮 — 动态遍历所有可用文件
+                const fileButtons = document.getElementById('file_download_buttons');
+                const fileSection = document.getElementById('file_download_section');
+                fileButtons.innerHTML = '';
+
+                const typeIcons = {
+                    'audio': '🎵',
+                    'text': '📝',
+                    'report': '📊',
+                };
+                let hasFiles = false;
+
+                if (downloadJson.status_code === 200 && downloadJson.data) {
+                    for (const [key, fileInfo] of Object.entries(downloadJson.data)) {
+                        // 判断文件类型
+                        let icon = '📎';
+                        if (key.startsWith('audio')) icon = '🎵';
+                        else if (key.startsWith('text')) icon = '📝';
+                        else if (key.startsWith('report')) icon = '📊';
+                        else if (key.startsWith('resume')) icon = '📄';
+
+                        const a = document.createElement('a');
+                        a.className = 'file-btn';
+                        a.href = fileInfo.url;
+                        a.target = '_blank';
+                        a.textContent = `${icon} ${fileInfo.label}`;
+                        fileButtons.appendChild(a);
+                        hasFiles = true;
+                    }
+                }
+
+                fileSection.style.display = hasFiles ? 'block' : 'none';
+
                 const fields = [
                     { label: 'ID', val: d.id },
                     { label: 'UUID', val: d.record_uuid, full: true },
