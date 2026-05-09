@@ -4,6 +4,7 @@ from Base.Config.setting import settings
 from Base.Repository.base.baseDBModel import BaseDBModel
 from Base.Repository.base.connectionManager import ConnectionManager
 from Base.Repository.connections.mysqlConnection import MySQLConnection
+from Base.Service.models.BaseAiDBModel import BaseAiDBModel
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def register_wolin_connection():
         logger.warning(f"注册 Wolin 数据库连接失败，程序将以无持久化模式运行：{str(e)}")
 
 
-class WolinModuleDBModel(BaseDBModel):
+class WolinModuleDBModel(BaseAiDBModel):
     """
     Wolin 模块数据库模型基类
 
