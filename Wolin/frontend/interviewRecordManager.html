@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>面试记录管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .container {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+        }
+        .title {
+            text-align: center;
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        /* 搜索区域 */
+        .search-panel {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+        .search-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
+        }
+        .search-item {
+            display: flex;
+            flex-direction: column;
+            min-width: 160px;
+            flex: 1;
+        }
+        .search-item label {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .search-item input,
+        .search-item select {
+            padding: 8px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        .search-item input:focus,
+        .search-item select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .search-buttons {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,0.3); }
+        .btn-secondary {
+            background: #e9ecef;
+            color: #333;
+        }
+        .btn-secondary:hover { background: #dee2e6; }
+        .btn-success {
+            background: #28a745;
+            color: #fff;
+        }
+        .btn-success:hover { background: #218838; }
+        .btn-danger {
+            background: #dc3545;
+            color: #fff;
+        }
+        .btn-danger:hover { background: #c82333; }
+        .btn-info {
+            background: #17a2b8;
+            color: #fff;
+        }
+        .btn-info:hover { background: #138496; }
+        .btn-sm {
+            padding: 5px 12px;
+            font-size: 12px;
+        }
+
+        /* 工具栏 */
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-shrink: 0;
+        }
+        .toolbar .record-count {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* 表格 */
+        .table-wrapper {
+            overflow-x: auto;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+            border-radius: 10px;
+            border: 2px solid #e1e5e9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        thead { background: #f8f9fa; }
+        th {
+            padding: 12px 10px;
+            text-align: left;
+            color: #333;
+            font-weight: 600;
+            border-bottom: 2px solid #e1e5e9;
+            white-space: nowrap;
+        }
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #f1f3f5;
+            vertical-align: middle;
+        }
+        tbody tr:hover { background: #f0f4ff; }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-processing { background: #fff3cd; color: #856404; }
+        .status-completed { background: #d4edda; color: #155724; }
+        .status-failed { background: #f8d7da; color: #721c24; }
+        .action-btns { display: flex; gap: 6px; }
+
+        /* 分页 */
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding: 10px 0;
+            flex-shrink: 0;
+        }
+        .pagination-info {
+            color: #666;
+            font-size: 14px;
+        }
+        .pagination-controls {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .page-btn {
+            padding: 6px 12px;
+            border: 1px solid #e1e5e9;
+            background: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .page-btn:hover { border-color: #667eea; color: #667eea; }
+        .page-btn.active {
+            background: #667eea;
+            color: #fff;
+            border-color: #667eea;
+        }
+        .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .page-size-select {
+            padding: 6px 8px;
+            border: 1px solid #e1e5e9;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+
+        /* 模态框 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: #fff;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 25px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+        .form-group label {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 8px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .form-group textarea { resize: vertical; min-height: 60px; }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        /* 详情弹窗 */
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .detail-item {
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .detail-item.full-width { grid-column: 1 / -1; }
+        .detail-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 3px;
+        }
+        .detail-value {
+            font-size: 14px;
+            color: #333;
+            word-break: break-word;
+        }
+        .detail-json {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f1f3f5;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        /* 空状态 & 加载 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">面试记录管理</h1>
+
+        <!-- 搜索面板 -->
+        <div class="search-panel">
+            <div class="search-row">
+                <div class="search-item">
+                    <label>用户姓名</label>
+                    <input type="text" id="search_user_name" placeholder="模糊搜索">
+                </div>
+                <div class="search-item">
+                    <label>公司名称</label>
+                    <input type="text" id="search_company_name" placeholder="模糊搜索">
+                </div>
+                <div class="search-item">
+                    <label>邮箱</label>
+                    <input type="text" id="search_user_email" placeholder="模糊搜索">
+                </div>
+                <div class="search-item">
+                    <label>状态</label>
+                    <select id="search_status">
+                        <option value="">全部</option>
+                        <option value="processing">处理中</option>
+                        <option value="completed">已完成</option>
+                        <option value="failed">失败</option>
+                    </select>
+                </div>
+                <div class="search-item">
+                    <label>创建时间起</label>
+                    <input type="date" id="search_created_at_start">
+                </div>
+                <div class="search-item">
+                    <label>创建时间止</label>
+                    <input type="date" id="search_created_at_end">
+                </div>
+                <div class="search-buttons">
+                    <button class="btn btn-primary" onclick="doSearch()">搜索</button>
+                    <button class="btn btn-secondary" onclick="resetSearch()">重置</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 工具栏 -->
+        <div class="toolbar">
+            <span class="record-count">共 <span id="total_count">0</span> 条记录</span>
+            <button class="btn btn-success" onclick="openCreateModal()">+ 新增记录</button>
+        </div>
+
+        <!-- 加载状态 -->
+        <div class="loading" id="loading">正在加载...</div>
+
+        <!-- 空状态 -->
+        <div class="empty-state" id="empty_state" style="display:none;">
+            <p>暂无记录</p>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="table-wrapper" id="table_wrapper" style="display:none;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>UUID</th>
+                        <th>用户姓名</th>
+                        <th>邮箱</th>
+                        <th>公司</th>
+                        <th>状态</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="table_body"></tbody>
+            </table>
+        </div>
+
+        <!-- 分页 -->
+        <div class="pagination" id="pagination" style="display:none;">
+            <div class="pagination-info" id="pagination_info"></div>
+            <div class="pagination-controls">
+                <button class="page-btn" id="prev_btn" onclick="goPage(page - 1)">上一页</button>
+                <span id="page_numbers"></span>
+                <button class="page-btn" id="next_btn" onclick="goPage(page + 1)">下一页</button>
+                <select class="page-size-select" id="page_size_select" onchange="changePageSize()">
+                    <option value="10">10条/页</option>
+                    <option value="20">20条/页</option>
+                    <option value="50">50条/页</option>
+                    <option value="100">100条/页</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增/编辑模态框 -->
+    <div class="modal-overlay" id="form_modal">
+        <div class="modal">
+            <h2 class="modal-title" id="modal_title">新增记录</h2>
+            <form id="record_form" onsubmit="return false;">
+                <input type="hidden" id="form_record_id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>用户姓名 *</label>
+                        <input type="text" id="form_user_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>邮箱</label>
+                        <input type="email" id="form_user_email">
+                    </div>
+                    <div class="form-group">
+                        <label>公司名称</label>
+                        <input type="text" id="form_company_name">
+                    </div>
+                    <div class="form-group">
+                        <label>状态</label>
+                        <select id="form_status">
+                            <option value="processing">处理中</option>
+                            <option value="completed">已完成</option>
+                            <option value="failed">失败</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>错误信息</label>
+                        <textarea id="form_error_msg" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" type="button" onclick="closeModal()">取消</button>
+                    <button class="btn btn-primary" type="button" onclick="submitForm()">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 详情模态框 -->
+    <div class="modal-overlay" id="detail_modal">
+        <div class="modal">
+            <h2 class="modal-title">记录详情</h2>
+            <div id="detail_content"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="document.getElementById('detail_modal').classList.remove('active')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let page = 1;
+        let page_size = 10;
+        let total = 0;
+
+        // ── 查询 ──────────────────────────────
+
+        function buildQuery() {
+            const params = new URLSearchParams();
+            const name = document.getElementById('search_user_name').value.trim();
+            const company = document.getElementById('search_company_name').value.trim();
+            const email = document.getElementById('search_user_email').value.trim();
+            const status = document.getElementById('search_status').value;
+            const dateStart = document.getElementById('search_created_at_start').value;
+            const dateEnd = document.getElementById('search_created_at_end').value;
+            if (name) params.append('user_name', name);
+            if (company) params.append('company_name', company);
+            if (email) params.append('user_email', email);
+            if (status) params.append('status', status);
+            if (dateStart) params.append('created_at_start', dateStart);
+            if (dateEnd) params.append('created_at_end', dateEnd);
+            params.append('page', page);
+            params.append('page_size', page_size);
+            return params;
+        }
+
+        async function doSearch() {
+            page = 1;
+            await fetchRecords();
+        }
+
+        function resetSearch() {
+            document.getElementById('search_user_name').value = '';
+            document.getElementById('search_company_name').value = '';
+            document.getElementById('search_user_email').value = '';
+            document.getElementById('search_status').value = '';
+            document.getElementById('search_created_at_start').value = '';
+            document.getElementById('search_created_at_end').value = '';
+            page = 1;
+            fetchRecords();
+        }
+
+        async function fetchRecords() {
+            const loading = document.getElementById('loading');
+            const table = document.getElementById('table_wrapper');
+            const empty = document.getElementById('empty_state');
+            const pag = document.getElementById('pagination');
+            loading.style.display = 'block';
+            table.style.display = 'none';
+            empty.style.display = 'none';
+            pag.style.display = 'none';
+
+            try {
+                const res = await fetch('/interview/records?' + buildQuery().toString());
+                const json = await res.json();
+                loading.style.display = 'none';
+
+                if (json.status_code === 200 && json.data) {
+                    const { items, total: t, page: p, page_size: ps } = json.data;
+                    total = t;
+                    page = p;
+                    page_size = ps;
+                    document.getElementById('total_count').textContent = total;
+                    document.getElementById('page_size_select').value = page_size;
+
+                    if (items.length === 0) {
+                        empty.style.display = 'block';
+                        return;
+                    }
+
+                    table.style.display = 'block';
+                    pag.style.display = 'flex';
+                    renderTable(items);
+                    renderPagination();
+                } else {
+                    alert('查询失败：' + (json.msg || '未知错误'));
+                }
+            } catch (e) {
+                loading.style.display = 'none';
+                alert('网络错误：' + e.message);
+            }
+        }
+
+        function formatTime(val) {
+            if (!val) return '-';
+            return new Date(val).toLocaleString('zh-CN');
+        }
+
+        function statusBadge(s) {
+            const map = { processing: '处理中', completed: '已完成', failed: '失败' };
+            return `<span class="status-badge status-${s}">${map[s] || s}</span>`;
+        }
+
+        function uuidShort(uuid) {
+            if (!uuid) return '-';
+            return uuid.substring(0, 8) + '...';
+        }
+
+        function renderTable(items) {
+            const tbody = document.getElementById('table_body');
+            tbody.innerHTML = items.map(item => `
+                <tr>
+                    <td>${item.id}</td>
+                    <td title="${item.record_uuid || ''}">${uuidShort(item.record_uuid)}</td>
+                    <td>${item.user_name || '-'}</td>
+                    <td>${item.user_email || '-'}</td>
+                    <td>${item.company_name || '-'}</td>
+                    <td>${statusBadge(item.status)}</td>
+                    <td>${formatTime(item.created_at)}</td>
+                    <td>
+                        <div class="action-btns">
+                            <button class="btn btn-info btn-sm" onclick="viewDetail(${item.id})">详情</button>
+                            <button class="btn btn-primary btn-sm" onclick="openEditModal(${item.id})">编辑</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteRecord(${item.id})">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderPagination() {
+            const totalPages = Math.ceil(total / page_size);
+            document.getElementById('pagination_info').textContent =
+                `第 ${page} / ${totalPages} 页，共 ${total} 条`;
+            document.getElementById('prev_btn').disabled = page <= 1;
+            document.getElementById('next_btn').disabled = page >= totalPages;
+
+            // 页码按钮
+            const container = document.getElementById('page_numbers');
+            let html = '';
+            const range = 2;
+            let start = Math.max(1, page - range);
+            let end = Math.min(totalPages, page + range);
+            if (start > 1) html += `<button class="page-btn" onclick="goPage(1)">1</button><span>…</span>`;
+            for (let i = start; i <= end; i++) {
+                html += `<button class="page-btn ${i === page ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+            }
+            if (end < totalPages) html += `<span>…</span><button class="page-btn" onclick="goPage(${totalPages})">${totalPages}</button>`;
+            container.innerHTML = html;
+        }
+
+        function goPage(p) {
+            const totalPages = Math.ceil(total / page_size);
+            if (p < 1 || p > totalPages) return;
+            page = p;
+            fetchRecords();
+        }
+
+        function changePageSize() {
+            page_size = parseInt(document.getElementById('page_size_select').value);
+            page = 1;
+            fetchRecords();
+        }
+
+        // ── 新增 ──────────────────────────────
+
+        function openCreateModal() {
+            document.getElementById('modal_title').textContent = '新增记录';
+            document.getElementById('form_record_id').value = '';
+            document.getElementById('form_user_name').value = '';
+            document.getElementById('form_user_email').value = '';
+            document.getElementById('form_company_name').value = '';
+            document.getElementById('form_status').value = 'processing';
+            document.getElementById('form_error_msg').value = '';
+            document.getElementById('form_modal').classList.add('active');
+        }
+
+        // ── 编辑 ──────────────────────────────
+
+        async function openEditModal(id) {
+            try {
+                const res = await fetch(`/interview/record/${id}`);
+                const json = await res.json();
+                if (json.status_code !== 200 || !json.data) {
+                    alert('获取记录失败：' + (json.msg || ''));
+                    return;
+                }
+                const d = json.data;
+                document.getElementById('modal_title').textContent = '编辑记录';
+                document.getElementById('form_record_id').value = d.id;
+                document.getElementById('form_user_name').value = d.user_name || '';
+                document.getElementById('form_user_email').value = d.user_email || '';
+                document.getElementById('form_company_name').value = d.company_name || '';
+                document.getElementById('form_status').value = d.status || 'processing';
+                document.getElementById('form_error_msg').value = d.error_msg || '';
+                document.getElementById('form_modal').classList.add('active');
+            } catch (e) {
+                alert('网络错误：' + e.message);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('form_modal').classList.remove('active');
+        }
+
+        async function submitForm() {
+            const id = document.getElementById('form_record_id').value;
+            const userName = document.getElementById('form_user_name').value.trim();
+            if (!userName) { alert('请输入用户姓名'); return; }
+
+            const formData = new FormData();
+            formData.append('user_name', userName);
+            formData.append('user_email', document.getElementById('form_user_email').value.trim());
+            formData.append('company_name', document.getElementById('form_company_name').value.trim());
+            formData.append('status', document.getElementById('form_status').value);
+            formData.append('error_msg', document.getElementById('form_error_msg').value.trim());
+
+            try {
+                let url, method;
+                if (id) {
+                    url = `/interview/record/${id}`;
+                    method = 'PUT';
+                } else {
+                    url = '/interview/record';
+                    method = 'POST';
+                }
+                const res = await fetch(url, { method, body: formData });
+                const json = await res.json();
+                if (json.status_code === 200) {
+                    closeModal();
+                    fetchRecords();
+                } else {
+                    alert((id ? '更新' : '创建') + '失败：' + (json.msg || ''));
+                }
+            } catch (e) {
+                alert('网络错误：' + e.message);
+            }
+        }
+
+        // ── 删除 ──────────────────────────────
+
+        async function deleteRecord(id) {
+            if (!confirm('确认删除此记录？此操作不可恢复。')) return;
+            try {
+                const res = await fetch(`/interview/record/${id}`, { method: 'DELETE' });
+                const json = await res.json();
+                if (json.status_code === 200) {
+                    fetchRecords();
+                } else {
+                    alert('删除失败：' + (json.msg || ''));
+                }
+            } catch (e) {
+                alert('网络错误：' + e.message);
+            }
+        }
+
+        // ── 详情 ──────────────────────────────
+
+        async function viewDetail(id) {
+            try {
+                const res = await fetch(`/interview/record/${id}`);
+                const json = await res.json();
+                if (json.status_code !== 200 || !json.data) {
+                    alert('获取详情失败：' + (json.msg || ''));
+                    return;
+                }
+                const d = json.data;
+                const fields = [
+                    { label: 'ID', val: d.id },
+                    { label: 'UUID', val: d.record_uuid, full: true },
+                    { label: '用户姓名', val: d.user_name },
+                    { label: '邮箱', val: d.user_email },
+                    { label: '公司', val: d.company_name },
+                    { label: '状态', val: statusBadge(d.status), raw: true },
+                    { label: '创建时间', val: formatTime(d.created_at) },
+                    { label: '完成时间', val: formatTime(d.completed_at) },
+                    { label: '音频时长', val: d.audio_duration ? d.audio_duration + '秒' : '-' },
+                    { label: '错误信息', val: d.error_msg || '-', full: true },
+                ];
+                let html = '<div class="detail-grid">';
+                fields.forEach(f => {
+                    html += `<div class="detail-item ${f.full ? 'full-width' : ''}">
+                        <div class="detail-label">${f.label}</div>
+                        <div class="detail-value">${f.raw ? f.val : (f.val || '-')}</div>
+                    </div>`;
+                });
+                html += '</div>';
+
+                // JSON 字段
+                const jsonFields = [
+                    { key: 'qa_pairs', label: '问答对' },
+                    { key: 'resume_info', label: '简历信息' },
+                    { key: 'interview_json', label: '面试详情' },
+                    { key: 'qa_analysis', label: '问答分析' },
+                ];
+                for (const f of jsonFields) {
+                    const val = d[f.key];
+                    if (val && typeof val === 'object') {
+                        html += `<div style="margin-top:12px;">
+                            <div class="detail-label">${f.label}</div>
+                            <div class="detail-json">${JSON.stringify(val, null, 2)}</div>
+                        </div>`;
+                    }
+                }
+                // 文本分析字段
+                const textFields = [
+                    { key: 'audio_text', label: '音频转写文本' },
+                    { key: 'analysis_start', label: '报告开篇语' },
+                    { key: 'resume_analysis', label: '简历分析' },
+                    { key: 'interview_evaluation', label: '面试官评价' },
+                    { key: 'self_evaluation', label: '自我评价' },
+                    { key: 'analysis_end', label: '报告结束语' },
+                ];
+                for (const f of textFields) {
+                    if (d[f.key]) {
+                        html += `<div style="margin-top:12px;">
+                            <div class="detail-label">${f.label}</div>
+                            <div class="detail-json">${escapeHtml(d[f.key])}</div>
+                        </div>`;
+                    }
+                }
+
+                document.getElementById('detail_content').innerHTML = html;
+                document.getElementById('detail_modal').classList.add('active');
+            } catch (e) {
+                alert('网络错误：' + e.message);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 点击模态框外部关闭
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function(e) {
+                if (e.target === this) this.classList.remove('active');
+            });
+        });
+
+        // 初始加载
+        fetchRecords();
+    </script>
+</body>
+</html>

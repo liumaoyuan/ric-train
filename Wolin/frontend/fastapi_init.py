@@ -28,3 +28,8 @@ def frontend_init(app : FastAPI):
     async def interview_chat_page(request: Request):
         """模拟面试对话页面"""
         return templates.TemplateResponse("interviewChat.html", {"request": request})
+
+    @app.get("/interview-record-manager", response_class=HTMLResponse)
+    async def interview_record_manager_page(request: Request):
+        """面试记录管理页面"""
+        return templates.TemplateResponse("interviewRecordManager.html", {"request": request})
