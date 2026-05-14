@@ -62,16 +62,18 @@ def extract_resume(state: IAState):
     if not state.resume_info.resume_path:
         return None
     try:
-        default_minio_client.upload_file(bucket_name="resumes",
-                                         object_name=state.resume_path + os.path.basename(state.asr_info.audio_path),
+        actual_name = default_minio_client.upload_file(bucket_name="resumes",
+                                         object_name=state.resume_path + os.path.basename(state.resume_info.resume_path),
                                          file_path=state.resume_info.resume_path)
+        if actual_name:
+            state.resume_minio_path = actual_name
     except Exception as e:
         logger.error(f"{state.api_params.user_name} 简历 文件上传 MinIO 时发生异常：{e}")
     resume_content = extract_pdf_text(state.resume_info.resume_path)
     resume_infos = default_qwen_llm.chat([SystemMessages(RESUME_JSON_EXTRACT_PROMPT), UserMessages(resume_content)])
     resume_info_json = json.loads(resume_infos)
     state.resume_info = ResumeInfo(**resume_info_json, resume_path=state.resume_info.resume_path)
-    return {'resume_info': state.resume_info}
+    return {'resume_info': state.resume_info, 'resume_minio_path': state.resume_minio_path}
 
 
 @graph_node
@@ -98,9 +100,11 @@ def audio_handle(state: IAState):
     :return:
     """
     try:
-        default_minio_client.upload_file(bucket_name="audios",
+        actual_name = default_minio_client.upload_file(bucket_name="audios",
                                          object_name=state.audio_path,
                                          file_path=state.asr_info.audio_path)
+        if actual_name:
+            state.audio_minio_path = actual_name
     except Exception as e:
         logger.error(f"{state.api_params.user_name}Audio 文件上传 MinIO 时发生异常：{e}")
     # 音频文件转文本碎片
@@ -116,13 +120,15 @@ def audio_handle(state: IAState):
     combine_text = get_combine_text(str_hash_code=short_unique_hash(str(ordered_results)))
 
     try:
-        default_minio_client.str_list_2_minio(str_list=combine_text,
+        actual_name = default_minio_client.str_list_2_minio(str_list=combine_text,
                                               bucket_name='audio-text',
                                               object_name=state.audio_text_path)
+        if actual_name:
+            state.audio_text_minio_path = actual_name
     except Exception as e:
         logger.error(f"{state.api_params.user_name}Audio-Text 文件上传 MinIO 时发生异常：{e}")
     state.asr_info.audio_text = combine_text
-    return {'asr_info': {"audio_text": combine_text}}
+    return {'asr_info': {"audio_text": combine_text}, 'audio_minio_path': state.audio_minio_path, 'audio_text_minio_path': state.audio_text_minio_path}
 
 
 @graph_node
@@ -237,9 +243,11 @@ def generate_report(state: IAState):
     logger.info(f"面试报告临时存储位置：\n {output_path}")
 
     try:
-        default_minio_client.upload_file(bucket_name="interview-report",
+        actual_name = default_minio_client.upload_file(bucket_name="interview-report",
                                          object_name=state.minio_path,
                                          file_path=output_path)
+        if actual_name:
+            state.report_minio_path = actual_name
     except Exception as e:
         logger.error(f"{state.api_params.user_name}报告 MinIO 存储失败：{e}")
 
@@ -256,7 +264,7 @@ def generate_report(state: IAState):
 
     if output_path and os.path.exists(output_path):
         os.unlink(output_path)
-    return None
+    return {'report_minio_path': getattr(state, 'report_minio_path', None)}
 
 
 @graph_node

@@ -115,11 +115,9 @@ class InterviewRecordService:
                 resume_data = state.resume_info.model_dump(exclude_none=True)
                 if resume_data:
                     update_data['resume_info'] = json.dumps(resume_data, ensure_ascii=False)
-                # 存储 MinIO 对象路径（同 upload_file 的 object_name）
+                # 存储 MinIO 对象路径（上传后 state.resume_path 返回实际路径）
                 if getattr(state, 'resume_path', None):
-                    resume_minio_name = state.resume_path + state.audio_path.split('/')[-1] if state.audio_path else None
-                    if resume_minio_name:
-                        update_data['resume_file_path'] = resume_minio_name
+                    update_data['resume_file_path'] = state.resume_path
 
             # 4. 更新报告信息
             if state.report:
