@@ -87,25 +87,48 @@ class MinioClient(metaclass=SingletonMeta):
     # Object (文件对象) 操作
     # ==========================
 
+    def _get_unique_object_name(self, bucket_name: str, object_name: str) -> str:
+        """
+        获取唯一的对象名，若已存在则添加 (1)、(2) 等后缀（类似 Windows 重命名规则）
+        """
+        if not self.stat_object(bucket_name, object_name):
+            return object_name
+
+        # 拆分文件名和扩展名
+        name, ext = os.path.splitext(object_name)
+        counter = 1
+        while True:
+            new_name = f"{name}({counter}){ext}"
+            if not self.stat_object(bucket_name, new_name):
+                return new_name
+            counter += 1
+
     def upload_file(self, bucket_name, object_name, file_path, content_type="application/octet-stream"):
         """
         上传本地文件到 Minio
         :param bucket_name: 桶名称
-        :param object_name: 在 Minio 中存储的文件名
+        :param object_name: 在 Minio 中存储的文件名（若已存在会自动重命名）
         :param file_path: 本地文件路径
         :param content_type: 文件类型
+        :return: 成功返回实际存储的 object_name，失败返回 None
         """
         try:
             # 检查桶是否存在，不存在则创建
             if not self.bucket_exists(bucket_name):
                 self.make_bucket(bucket_name)
 
+            # 处理同名文件：自动添加 (1)、(2) 后缀
+            object_name = self._get_unique_object_name(bucket_name, object_name)
+
             self.client.fput_object(bucket_name, object_name, file_path, content_type=content_type)
             logger.info(f"[*] 文件 '{file_path}' 上传成功 -> '{bucket_name}/{object_name}'")
-            return True
+            return object_name
         except S3Error as e:
             logger.error(f"[!] 上传文件失败: {e}")
-            return False
+            return None
+        except Exception as e:
+            logger.error(f"[!] 上传文件异常: {e}")
+            return None
 
     def download_file(self, bucket_name, object_name, file_path):
         """
@@ -175,9 +198,10 @@ class MinioClient(metaclass=SingletonMeta):
             logger.error(f"[!] 获取对象信息失败: {e}")
             return None
 
-    def str_list_2_minio(self, str_list: list[str] | str, bucket_name: str, object_name: str):
+    def str_list_2_minio(self, str_list: list[str] | str, bucket_name: str, object_name: str) -> str | None:
         """
         write the str_list to minIO
+        :return: 成功返回实际存储的 object_name，失败返回 None
         """
         if isinstance(str_list,str):
             str_list = [str_list]
@@ -191,11 +215,12 @@ class MinioClient(metaclass=SingletonMeta):
             tmp_file.flush()
             temp_file_path = tmp_file.name
 
-        self.upload_file(bucket_name=bucket_name,
+        result = self.upload_file(bucket_name=bucket_name,
                          object_name=object_name,
                          file_path=temp_file_path)
 
         os.unlink(temp_file_path)
+        return result
 
 
 class MinioAsyncClient(MinioClient):

@@ -66,6 +66,11 @@ class IAState(BaseState):
     # 持久化相关字段
     record_uuid: Optional[str] = Field(None, description='数据库记录 UUID')
 
+    # MinIO 实际存储路径（上传成功后覆盖默认计算路径）
+    audio_minio_path: Optional[str] = Field(None, description='音频 MinIO 实际路径')
+    audio_text_minio_path: Optional[str] = Field(None, description='音频文本 MinIO 实际路径')
+    report_minio_path: Optional[str] = Field(None, description='报告 MinIO 实际路径')
+    resume_minio_path: Optional[str] = Field(None, description='简历 MinIO 实际路径')
 
     @property
     def context_params(self):
@@ -78,16 +83,16 @@ class IAState(BaseState):
 
     @property
     def minio_path(self):
-        return f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.docx'
+        return self.report_minio_path or f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.docx'
 
     @property
     def audio_path(self):
-        return f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.m4a'
+        return self.audio_minio_path or f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.m4a'
 
     @property
     def audio_text_path(self):
-        return f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.txt'
+        return self.audio_text_minio_path or f'{self.api_params.user_name}/{self.api_params.user_name}_{self.api_params.company_name}.txt'
 
     @property
     def resume_path(self):
-        return f'{self.api_params.user_name}/'
+        return self.resume_minio_path or f'{self.api_params.user_name}/'

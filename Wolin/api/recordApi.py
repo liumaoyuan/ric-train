@@ -154,52 +154,54 @@ async def get_download_urls(record_id: int):
         if not record:
             return HttpResponse.error(msg="记录不存在")
 
+        import os
         files = {}
 
-        # 音频：按代码中的路径规则推导 audios/{user_name}/{user_name}_{company_name}.m4a
-        if record.user_name and record.company_name:
-            audio_path = f"{record.user_name}/{record.user_name}_{record.company_name}.m4a"
-            if default_minio_client.stat_object('audios', audio_path):
-                url = default_minio_client.get_presigned_url('audios', audio_path, expiry_hours=2)
+        # 音频：优先使用 DB 中存储的实际路径，回退到模板路径
+        if record.audio_file_path:
+            if default_minio_client.stat_object('audios', record.audio_file_path):
+                url = default_minio_client.get_presigned_url('audios', record.audio_file_path, expiry_hours=2)
+                if url:
+                    files['audio'] = {'url': url, 'label': os.path.basename(record.audio_file_path)}
+        elif record.user_name and record.company_name:
+            fallback = f"{record.user_name}/{record.user_name}_{record.company_name}.m4a"
+            if default_minio_client.stat_object('audios', fallback):
+                url = default_minio_client.get_presigned_url('audios', fallback, expiry_hours=2)
                 if url:
                     files['audio'] = {'url': url, 'label': f'{record.user_name}_{record.company_name}.m4a'}
 
-        # 音频文本：audio-text/{user_name}/{user_name}_{company_name}.txt
-        if record.user_name and record.company_name:
-            text_path = f"{record.user_name}/{record.user_name}_{record.company_name}.txt"
-            if default_minio_client.stat_object('audio-text', text_path):
-                url = default_minio_client.get_presigned_url('audio-text', text_path, expiry_hours=2)
+        # 音频文本：优先使用 DB 路径，回退到模板路径
+        if record.audio_text_path:
+            if default_minio_client.stat_object('audio-text', record.audio_text_path):
+                url = default_minio_client.get_presigned_url('audio-text', record.audio_text_path, expiry_hours=2)
+                if url:
+                    files['text'] = {'url': url, 'label': os.path.basename(record.audio_text_path)}
+        elif record.user_name and record.company_name:
+            fallback = f"{record.user_name}/{record.user_name}_{record.company_name}.txt"
+            if default_minio_client.stat_object('audio-text', fallback):
+                url = default_minio_client.get_presigned_url('audio-text', fallback, expiry_hours=2)
                 if url:
                     files['text'] = {'url': url, 'label': f'{record.user_name}_{record.company_name}.txt'}
 
-        # 面试报告：interview-report/{user_name}/{user_name}_{company_name}.docx
-        if record.user_name and record.company_name:
-            report_path = f"{record.user_name}/{record.user_name}_{record.company_name}.docx"
-            if default_minio_client.stat_object('interview-report', report_path):
-                url = default_minio_client.get_presigned_url('interview-report', report_path, expiry_hours=2)
+        # 面试报告：优先使用 DB 路径，回退到模板路径
+        if record.report_file_path:
+            if default_minio_client.stat_object('interview-report', record.report_file_path):
+                url = default_minio_client.get_presigned_url('interview-report', record.report_file_path, expiry_hours=2)
+                if url:
+                    files['report'] = {'url': url, 'label': os.path.basename(record.report_file_path)}
+        elif record.user_name and record.company_name:
+            fallback = f"{record.user_name}/{record.user_name}_{record.company_name}.docx"
+            if default_minio_client.stat_object('interview-report', fallback):
+                url = default_minio_client.get_presigned_url('interview-report', fallback, expiry_hours=2)
                 if url:
                     files['report'] = {'url': url, 'label': f'{record.user_name}_{record.company_name}.docx'}
 
-        # 简历：resumes 桶路径不规则，列出该用户文件夹下的所有 pdf/docx 文件
-        if record.user_name:
-            resume_prefix = f"{record.user_name}/"
-            objects = default_minio_client.client.list_objects('resumes', prefix=resume_prefix, recursive=True)
-            for obj in objects:
-                name = obj.object_name
-                if name.endswith(('.pdf', '.docx')):
-                    url = default_minio_client.get_presigned_url('resumes', name, expiry_hours=2)
-                    if url:
-                        # 用原始文件名作为 label
-                        import os
-                        label = os.path.basename(name)
-                        # 如果有多个简历，加序号区分
-                        key = 'resume'
-                        if key in files:
-                            i = 1
-                            while f'resume_{i}' in files:
-                                i += 1
-                            key = f'resume_{i}'
-                        files[key] = {'url': url, 'label': label}
+        # 简历：直接使用 DB 中存储的路径
+        if record.resume_file_path:
+            if default_minio_client.stat_object('resumes', record.resume_file_path):
+                url = default_minio_client.get_presigned_url('resumes', record.resume_file_path, expiry_hours=2)
+                if url:
+                    files['resume'] = {'url': url, 'label': os.path.basename(record.resume_file_path)}
 
         return HttpResponse.ok(data=files)
     except Exception as e:
