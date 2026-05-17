@@ -537,7 +537,6 @@ class DataGenerator:
         order_count = params["order_count"]
         takeout_ratio = params["takeout_ratio"]
         dish_ids = self.dish_ids
-        dish_count = len(dish_ids)
         pop_weights = [self.dish_info[did]["popularity"] for did in dish_ids]
 
         # 该门店的会员列表
@@ -703,7 +702,7 @@ class DataGenerator:
             "temperature": params["temperature"],
         }
 
-    def process_store(self, store_id: int, open_date: date) -> tuple[int, int, int, int]:
+    def process_store(self, store_id: int, open_date: date) -> tuple[int, int, int]:
         """处理一个门店从开业到结束所有天的数据，返回 (堂食订单数, 外卖订单数, 总明细数)"""
         total_dine_in = 0
         total_takeout = 0
