@@ -843,14 +843,14 @@ class DataGenerator:
         t_start = time.time()
 
         # ── 1. 门店 ──
-        print("\n[1/6] 门店数据")
+        print("\n[1/5] 门店数据")
         store_data = self.generate_stores()
         store_ids = self.insert_stores(store_data)
         # 记录每家门店的开业日期
         self.store_dates = {sid: sd["open_date"] for sid, sd in zip(store_ids, store_data)}
 
         # ── 2. 菜品 ──
-        print("\n[2/6] 菜品数据")
+        print("\n[2/5] 菜品数据")
         self.generate_and_insert_dishes()
 
         # ── 3. 订单 + 营业数据（最耗时）──
