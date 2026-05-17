@@ -12,7 +12,7 @@
 ### 1. 建表
 
 ```bash
-mysql -h localhost -u root -p for_student < schema.sql
+mysql -h localhost -u root -p catering_ai_system < schema.sql
 ```
 
 ### 2. 生成模拟数据
@@ -36,7 +36,7 @@ CONFIG = {
     "DB_PORT": 3306,
     "DB_USER": "root",
     "DB_PASSWORD": "liu12138",
-    "DB_NAME": "for_student",
+    "DB_NAME": "catering_ai_system",
     "START_DATE": "2024-01-01",    # 全局数据起始日期
     "END_DATE": "2026-05-17",      # 数据结束日期
     "STORE_COUNT": 500,             # 门店数量

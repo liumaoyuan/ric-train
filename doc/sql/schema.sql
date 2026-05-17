@@ -5,11 +5,11 @@
 -- ===========================================
 
 -- 数据库创建（如不存在）
-CREATE DATABASE IF NOT EXISTS for_student
+CREATE DATABASE IF NOT EXISTS catering_ai_system
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
-USE for_student;
+USE catering_ai_system;
 
 -- ===========================================
 -- 1. 门店表

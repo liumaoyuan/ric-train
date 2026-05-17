@@ -44,7 +44,7 @@ CONFIG = {
     "DB_PORT": int(os.getenv("DB_PORT", "3306")),
     "DB_USER": os.getenv("DB_USER", "root"),
     "DB_PASSWORD": os.getenv("DB_PASSWORD", "liu12138"),
-    "DB_NAME": os.getenv("DB_NAME", "for_student"),
+    "DB_NAME": os.getenv("DB_NAME", "catering_ai_system"),
     "START_DATE": "2024-01-01",
     "END_DATE": "2026-05-17",
     "STORE_COUNT": 500,
