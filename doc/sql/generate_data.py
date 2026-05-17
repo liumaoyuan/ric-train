@@ -45,8 +45,8 @@ CONFIG = {
     "DB_USER": os.getenv("DB_USER", "root"),
     "DB_PASSWORD": os.getenv("DB_PASSWORD", "liu12138"),
     "DB_NAME": os.getenv("DB_NAME", "for_student"),
-    "START_DATE": "2025-01-01",
-    "END_DATE": "2025-12-31",
+    "START_DATE": "2024-01-01",
+    "END_DATE": "2026-05-17",
     "STORE_COUNT": 500,
     "BATCH_ORDERS": 5000,       # orders 批量插入
     "BATCH_ITEMS": 10000,       # order_item 批量插入
@@ -198,6 +198,21 @@ HOLIDAYS = {
     date(2025, 10, 6): ("中秋节", 1.4),
     date(2025, 10, 7): ("国庆节", 1.2),
     date(2025, 12, 31): ("跨年", 1.2),
+    # 2026 年节日（截至 2026-05-17）
+    date(2026, 1, 1): ("元旦", 1.3),
+    date(2026, 2, 16): ("除夕", 1.5),
+    date(2026, 2, 17): ("春节初一", 1.6),
+    date(2026, 2, 18): ("春节初二", 1.5),
+    date(2026, 2, 19): ("春节初三", 1.5),
+    date(2026, 2, 20): ("春节初四", 1.4),
+    date(2026, 2, 21): ("春节初五", 1.4),
+    date(2026, 2, 22): ("春节初六", 1.3),
+    date(2026, 2, 23): ("春节初七", 1.3),
+    date(2026, 4, 5): ("清明节", 1.2),
+    date(2026, 4, 6): ("清明节", 1.2),
+    date(2026, 5, 1): ("劳动节", 1.4),
+    date(2026, 5, 2): ("劳动节", 1.3),
+    date(2026, 5, 3): ("劳动节", 1.2),
 }
 
 WEEKEND_MULTIPLIER = 1.12
@@ -301,6 +316,9 @@ class DataGenerator:
         self.end_date = date.fromisoformat(config["END_DATE"])
         self.total_days = (self.end_date - self.start_date).days + 1
 
+        # store_id -> open_date（每家门店随机开业时间）
+        self.store_dates: dict[int, date] = {}
+
         # 累计订单号计数器（全局唯一）
         self.order_no_counter = 1
 
@@ -357,7 +375,7 @@ class DataGenerator:
                     "district": f"{area_code}区",
                     "address": f"{city}模拟路{self.rand.randint(1, 500)}号",
                     "phone": f"1{self.rand.randint(30, 99)}{self.rand.randint(10000000, 99999999)}",
-                    "open_date": date(self.rand.randint(2018, 2023), self.rand.randint(1, 12), self.rand.randint(1, 28)),
+                    "open_date": date(2023, 7, 1) + timedelta(days=self.rand.randint(0, 913)),
                     "status": 1,
                     "level": self.rand.choices([1, 2, 3], weights=[10, 60, 30])[0],
                 })
@@ -401,7 +419,7 @@ class DataGenerator:
     # --------------------------------------------------
     # 会员
     # --------------------------------------------------
-    def generate_and_insert_members(self, store_ids: list[int]):
+    def generate_and_insert_members(self, store_ids: list[int], store_dates: dict[int, date]):
         print(f"\n  生成会员数据...")
         sql = """INSERT INTO member (store_id, name, phone, level, points, total_spent,
                                      total_orders, join_date, status, created_at)
@@ -409,15 +427,15 @@ class DataGenerator:
         for sid in store_ids:
             n_members = self.rand.randint(30, 80)
             store_members = []
+            open_date = store_dates[sid]
+            store_days = (self.end_date - open_date).days + 1
             for _ in range(n_members):
                 name = self.rand.choice(SURNAMES) + self.rand.choice(GIVEN_NAMES)
                 phone = f"1{self.rand.randint(30, 99)}{self.rand.randint(10000000, 99999999)}"
-                # 随机注册日期 2024-01-01 ~ 2025 年内
-                jd = date(2024, 1, 1) + timedelta(days=self.rand.randint(0, 365 + self.total_days - 1))
-                if jd > date(2025, 12, 31):
-                    jd = date(2025, 12, 31)
+                # 注册日期在门店开业后
+                jd = open_date + timedelta(days=self.rand.randint(0, max(0, store_days - 1)))
                 # 根据注册时长和活跃度生成累计消费
-                days_since_join = (date(2025, 12, 31) - jd).days
+                days_since_join = (self.end_date - jd).days
                 avg_order = self.rand.uniform(18, 35)
                 freq = self.rand.uniform(0.03, 0.12)  # 日均消费概率
                 total_orders = max(1, int(days_since_join * freq))
@@ -685,14 +703,15 @@ class DataGenerator:
             "temperature": params["temperature"],
         }
 
-    def process_store(self, store_id: int) -> tuple[int, int, int, int]:
-        """处理一个门店所有天的数据，返回 (堂食订单数, 外卖订单数, 总明细数)"""
+    def process_store(self, store_id: int, open_date: date) -> tuple[int, int, int, int]:
+        """处理一个门店从开业到结束所有天的数据，返回 (堂食订单数, 外卖订单数, 总明细数)"""
         total_dine_in = 0
         total_takeout = 0
         total_items = 0
+        store_days = (self.end_date - open_date).days + 1
 
-        for day_offset in range(self.total_days):
-            d = self.start_date + timedelta(days=day_offset)
+        for day_offset in range(store_days):
+            d = open_date + timedelta(days=day_offset)
             params = self._calc_daily_params(store_id, d)
             if params is None:
                 continue
@@ -732,7 +751,7 @@ class DataGenerator:
     # --------------------------------------------------
     # 评论
     # --------------------------------------------------
-    def generate_and_insert_reviews(self, store_ids: list[int]):
+    def generate_and_insert_reviews(self, store_ids: list[int], store_dates: dict[int, date]):
         print(f"\n  生成评论数据...")
         sql = """INSERT INTO review (store_id, platform, rating, content, review_date,
                  review_time, tags, is_replied, reply_content, is_positive, created_at)
@@ -740,10 +759,12 @@ class DataGenerator:
         dish_names = [d[0] for d in DISHES]
         all_reviews = []
         for sid in store_ids:
-            review_days = max(1, int(self.total_days * 0.15))
+            open_date = store_dates[sid]
+            store_days = (self.end_date - open_date).days + 1
+            review_days = max(1, int(store_days * 0.15))
             rdates = set()
             for _ in range(review_days):
-                rd = self.start_date + timedelta(days=self.rand.randint(0, self.total_days - 1))
+                rd = open_date + timedelta(days=self.rand.randint(0, store_days - 1))
                 rdates.add(rd)
             for rd in rdates:
                 rating = self.rand.choices([1, 2, 3, 4, 5], weights=[30, 10, 5, 15, 40])[0]
@@ -823,21 +844,24 @@ class DataGenerator:
 
         # ── 1. 门店 ──
         print("\n[1/6] 门店数据")
-        store_ids = self.insert_stores(self.generate_stores())
+        store_data = self.generate_stores()
+        store_ids = self.insert_stores(store_data)
+        # 记录每家门店的开业日期
+        self.store_dates = {sid: sd["open_date"] for sid, sd in zip(store_ids, store_data)}
 
         # ── 2. 菜品 ──
         print("\n[2/6] 菜品数据")
         self.generate_and_insert_dishes()
 
         # ── 3. 订单 + 营业数据（最耗时）──
-        print(f"\n[3/5] 订单数据（{len(store_ids)} 家门店 × {self.total_days} 天）")
+        print(f"\n[3/5] 订单数据（{len(store_ids)} 家门店，每家经营 1~2 年）")
         grand_total_dine_in = 0
         grand_total_takeout = 0
         grand_total_items = 0
         store_idx = 0
         for sid in store_ids:
             store_idx += 1
-            di, to, items = self.process_store(sid)
+            di, to, items = self.process_store(sid, self.store_dates[sid])
             grand_total_dine_in += di
             grand_total_takeout += to
             grand_total_items += items
@@ -849,7 +873,7 @@ class DataGenerator:
 
         # ── 4. 评论 ──
         print("\n[4/5] 风评评论数据")
-        self.generate_and_insert_reviews(store_ids)
+        self.generate_and_insert_reviews(store_ids, self.store_dates)
 
         # ── 5. 用户 ──
         print("\n[5/5] 用户账号")
