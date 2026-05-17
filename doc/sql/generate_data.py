@@ -5,10 +5,13 @@
 生成数据范围：
   - 门店: 500 家，均匀分布全国各省市
   - 菜品: 31 道中式快餐常见菜品
-  - 订单: 每店每日数十条订单，每条 1~4 个菜品
+  - 会员: 每店 30~80 名会员
+  - 堂食订单: 区分会员订单与非会员订单，含支付方式
+  - 外卖订单: 记录外卖平台（美团/饿了么/抖音），无支付方式
+  - 订单明细: 每单 1~4 个菜品
   - 营业汇总: 每日每店聚合
   - 评论: 模拟各平台用户评论
-  - 库存与采购: 基于销量自动生成
+  - 用户: 总部 + 员工 + 加盟商账号
 
 使用方法:
   python generate_data.py
@@ -108,6 +111,16 @@ SUPPLIERS = [
     "隆达粮油贸易公司", "顺丰冷链物流", "本土优选农产品合作社",
     "永辉食材批发中心",
 ]
+
+# ============================================================
+# 会员姓名数据
+# ============================================================
+SURNAMES = ["王", "李", "张", "刘", "陈", "杨", "黄", "赵", "周", "吴",
+            "徐", "孙", "马", "朱", "胡", "郭", "林", "何", "高", "罗"]
+
+GIVEN_NAMES = ["伟", "芳", "娜", "秀英", "敏", "静", "丽", "强", "磊", "洋",
+               "勇", "艳", "杰", "娟", "涛", "明", "超", "秀兰", "霞", "平",
+               "刚", "桂英", "文", "华", "飞", "红", "斌", "玲", "军", "建华"]
 
 # ============================================================
 # 菜品数据（31 道）
@@ -281,6 +294,9 @@ class DataGenerator:
         # dish_id -> {name, price, category, popularity}
         self.dish_info: dict[int, dict] = {}
 
+        # store_id -> list of member_ids
+        self.member_ids: dict[int, list[int]] = {}
+
         self.start_date = date.fromisoformat(config["START_DATE"])
         self.end_date = date.fromisoformat(config["END_DATE"])
         self.total_days = (self.end_date - self.start_date).days + 1
@@ -383,6 +399,49 @@ class DataGenerator:
         return ids
 
     # --------------------------------------------------
+    # 会员
+    # --------------------------------------------------
+    def generate_and_insert_members(self, store_ids: list[int]):
+        print(f"\n  生成会员数据...")
+        sql = """INSERT INTO member (store_id, name, phone, level, points, total_spent,
+                                     total_orders, join_date, status, created_at)
+                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())"""
+        for sid in store_ids:
+            n_members = self.rand.randint(30, 80)
+            store_members = []
+            for _ in range(n_members):
+                name = self.rand.choice(SURNAMES) + self.rand.choice(GIVEN_NAMES)
+                phone = f"1{self.rand.randint(30, 99)}{self.rand.randint(10000000, 99999999)}"
+                # 随机注册日期 2024-01-01 ~ 2025 年内
+                jd = date(2024, 1, 1) + timedelta(days=self.rand.randint(0, 365 + self.total_days - 1))
+                if jd > date(2025, 12, 31):
+                    jd = date(2025, 12, 31)
+                # 根据注册时长和活跃度生成累计消费
+                days_since_join = (date(2025, 12, 31) - jd).days
+                avg_order = self.rand.uniform(18, 35)
+                freq = self.rand.uniform(0.03, 0.12)  # 日均消费概率
+                total_orders = max(1, int(days_since_join * freq))
+                total_spent = round(total_orders * avg_order, 2)
+                # 等级
+                if total_spent >= 5000:
+                    level = 4
+                elif total_spent >= 2000:
+                    level = 3
+                elif total_spent >= 500:
+                    level = 2
+                else:
+                    level = 1
+                points = int(total_spent * self.rand.uniform(0.5, 1.0))
+                store_members.append((sid, name, phone, level, points, total_spent, total_orders, jd, 1))
+            self.executemany(sql, store_members)
+            self.commit()
+            # 回查 member_id
+            self.execute("SELECT id FROM member WHERE store_id = %s ORDER BY id", (sid,))
+            self.member_ids[sid] = [r[0] for r in self.cursor.fetchall()]
+        total = sum(len(v) for v in self.member_ids.values())
+        print(f"    → 生成 {total} 条会员记录")
+
+    # --------------------------------------------------
     # 天气/季节辅助
     # --------------------------------------------------
     def _get_season(self, month: int) -> str:
@@ -430,7 +489,8 @@ class DataGenerator:
         revenue = max(500, round(revenue, 2))
 
         avg_price = round(self.rand.uniform(22, 38), 1)
-        takeout_ratio = self.rand.uniform(0.25, 0.50)
+        # 外卖占比 15%~40%
+        takeout_ratio = self.rand.uniform(0.15, 0.40)
         order_count = max(1, int(revenue / avg_price))
 
         return {
@@ -449,19 +509,24 @@ class DataGenerator:
     # --------------------------------------------------
     # 订单生成（核心）
     # --------------------------------------------------
-    def _generate_orders_for_day(self, params: dict) -> tuple[list[dict], list[dict]]:
+    def _generate_orders_for_day(self, params: dict) -> tuple[list[dict], list[dict], list[dict]]:
         """
-        为单店单天生成订单及明细。
-        返回 (orders, items)，orders 不含 id，items 不含 id 但含 order_idx 用于关联。
+        为单店单天生成堂食订单、外卖订单及明细。
+        返回 (dine_in_orders, takeout_orders, items)
         """
         sid = params["store_id"]
         d = params["date"]
         order_count = params["order_count"]
+        takeout_ratio = params["takeout_ratio"]
         dish_ids = self.dish_ids
         dish_count = len(dish_ids)
         pop_weights = [self.dish_info[did]["popularity"] for did in dish_ids]
 
-        orders: list[dict] = []
+        # 该门店的会员列表
+        members = self.member_ids.get(sid, [])
+
+        dine_in_orders: list[dict] = []
+        takeout_orders: list[dict] = []
         items: list[dict] = []
 
         for _ in range(order_count):
@@ -489,55 +554,85 @@ class DataGenerator:
                 })
 
             total = round(total, 2)
-            pay_method = self.rand.choices(
-                ["微信支付", "支付宝支付", "现金支付"], weights=[50, 35, 15]
-            )[0]
-            order_type = self.rand.choices(["堂食", "外卖"], weights=[60, 40])[0]
 
             # 分配时间
             time_idx = self.rand.choices(range(len(ORDER_TIME_DIST)),
                                           weights=[p for _, _, p in ORDER_TIME_DIST])[0]
             h, m, _ = ORDER_TIME_DIST[time_idx]
-            # 加分钟内随机偏移
             m_offset = self.rand.randint(0, 29)
             order_time = datetime(d.year, d.month, d.day, h, m + m_offset)
 
             order_no = f"ORD{d.strftime('%Y%m%d')}{self.order_no_counter:08d}"
             self.order_no_counter += 1
 
-            orders.append({
-                "store_id": sid,
-                "order_no": order_no,
-                "total_amount": total,
-                "payment_method": pay_method,
-                "order_type": order_type,
-                "dish_count": n_dishes,
-                "order_time": order_time,
-            })
+            # 判断订单类型
+            is_takeout = self.rand.random() < takeout_ratio
+
+            if is_takeout:
+                platform = self.rand.choice(["美团", "饿了么", "抖音"])
+                takeout_orders.append({
+                    "store_id": sid,
+                    "order_no": order_no,
+                    "total_amount": total,
+                    "platform": platform,
+                    "dish_count": n_dishes,
+                    "order_time": order_time,
+                })
+            else:
+                pay_method = self.rand.choices(
+                    ["微信支付", "支付宝支付", "现金支付"], weights=[50, 35, 15]
+                )[0]
+                # 50% 概率是会员订单
+                member_id = None
+                if members and self.rand.random() < 0.5:
+                    member_id = self.rand.choice(members)
+                dine_in_orders.append({
+                    "store_id": sid,
+                    "order_no": order_no,
+                    "total_amount": total,
+                    "payment_method": pay_method,
+                    "member_id": member_id,
+                    "dish_count": n_dishes,
+                    "order_time": order_time,
+                })
 
             for oi in order_items:
                 oi["store_id"] = sid
-                oi["order_no"] = order_no  # 用 order_no 做临时关联
+                oi["order_no"] = order_no
 
             items.extend(order_items)
 
-        return orders, items
+        return dine_in_orders, takeout_orders, items
 
     # --------------------------------------------------
-    # 批量插入订单 + 明细 + 聚合
+    # 批量插入订单
     # --------------------------------------------------
-    def _insert_orders_batch(self, orders: list[dict]) -> dict[str, int]:
-        """批量插入订单，返回 {order_no -> id} 映射"""
+    def _insert_dine_in_orders_batch(self, orders: list[dict]) -> dict[str, int]:
+        """批量插入堂食订单，返回 {order_no -> id} 映射"""
         if not orders:
             return {}
-        sql = """INSERT INTO orders (store_id, order_no, total_amount, payment_method,
-                                     order_type, dish_count, order_time, created_at)
+        sql = """INSERT INTO dine_in_order (store_id, order_no, total_amount, payment_method,
+                                            member_id, dish_count, order_time, created_at)
                  VALUES (%(store_id)s, %(order_no)s, %(total_amount)s, %(payment_method)s,
-                         %(order_type)s, %(dish_count)s, %(order_time)s, NOW())"""
+                         %(member_id)s, %(dish_count)s, %(order_time)s, NOW())"""
         self.executemany(sql, orders)
         order_nos = [o["order_no"] for o in orders]
         placeholders = ",".join(["%s"] * len(order_nos))
-        self.execute(f"SELECT order_no, id FROM orders WHERE order_no IN ({placeholders})", order_nos)
+        self.execute(f"SELECT order_no, id FROM dine_in_order WHERE order_no IN ({placeholders})", order_nos)
+        return {row[0]: row[1] for row in self.cursor.fetchall()}
+
+    def _insert_takeout_orders_batch(self, orders: list[dict]) -> dict[str, int]:
+        """批量插入外卖订单，返回 {order_no -> id} 映射"""
+        if not orders:
+            return {}
+        sql = """INSERT INTO takeout_order (store_id, order_no, total_amount, platform,
+                                            dish_count, order_time, created_at)
+                 VALUES (%(store_id)s, %(order_no)s, %(total_amount)s, %(platform)s,
+                         %(dish_count)s, %(order_time)s, NOW())"""
+        self.executemany(sql, orders)
+        order_nos = [o["order_no"] for o in orders]
+        placeholders = ",".join(["%s"] * len(order_nos))
+        self.execute(f"SELECT order_no, id FROM takeout_order WHERE order_no IN ({placeholders})", order_nos)
         return {row[0]: row[1] for row in self.cursor.fetchall()}
 
     def _insert_items_batch(self, items: list[dict], no_to_id: dict[str, int]):
@@ -558,22 +653,18 @@ class DataGenerator:
         if rows:
             self.executemany(sql, rows)
 
-    def _aggregate_summary(self, params: dict, orders: list[dict], items: list[dict]) -> dict:
-        """从订单和明细聚合出 daily_summary"""
-        total_revenue = sum(o["total_amount"] for o in orders)
-        total_orders = len(orders)
-        dine_in = sum(o["total_amount"] for o in orders if o["order_type"] == "堂食")
-        takeout = sum(o["total_amount"] for o in orders if o["order_type"] == "外卖")
+    def _aggregate_summary(self, params: dict, dine_in: list[dict], takeout: list[dict], items: list[dict]) -> dict:
+        """从堂食和外卖订单聚合出 daily_summary"""
+        all_orders = dine_in + takeout
+        total_revenue = sum(o["total_amount"] for o in all_orders)
+        total_orders = len(all_orders)
+        dine_in_rev = sum(o["total_amount"] for o in dine_in)
+        takeout_rev = sum(o["total_amount"] for o in takeout)
         avg_price = round(total_revenue / total_orders, 2) if total_orders else 0
         dish_total = len(items)
-        peak_items = [
-            it for it in items
-            if any(o["order_no"] == it["order_no"] and
-                   (11 <= o["order_time"].hour < 13 or 18 <= o["order_time"].hour < 20)
-                   for o in orders)
-        ]
+
         peak_rev = 0.0
-        for o in orders:
+        for o in all_orders:
             if 11 <= o["order_time"].hour < 13 or 18 <= o["order_time"].hour < 20:
                 peak_rev += o["total_amount"]
         peak_rev = round(peak_rev, 2)
@@ -585,8 +676,8 @@ class DataGenerator:
             "total_orders": total_orders,
             "total_customers": total_orders,
             "avg_price": avg_price,
-            "dine_in_revenue": dine_in,
-            "takeout_revenue": takeout,
+            "dine_in_revenue": dine_in_rev,
+            "takeout_revenue": takeout_rev,
             "peak_hour_revenue": peak_rev,
             "dish_total_count": dish_total,
             "is_holiday": params["is_holiday"],
@@ -594,9 +685,10 @@ class DataGenerator:
             "temperature": params["temperature"],
         }
 
-    def process_store(self, store_id: int) -> tuple[int, int]:
-        """处理一个门店所有天的数据，返回 (总订单数, 总明细数)"""
-        total_orders = 0
+    def process_store(self, store_id: int) -> tuple[int, int, int, int]:
+        """处理一个门店所有天的数据，返回 (堂食订单数, 外卖订单数, 总明细数)"""
+        total_dine_in = 0
+        total_takeout = 0
         total_items = 0
 
         for day_offset in range(self.total_days):
@@ -605,15 +697,18 @@ class DataGenerator:
             if params is None:
                 continue
 
-            # 生成订单
-            orders, items = self._generate_orders_for_day(params)
+            dine_in, takeout, items = self._generate_orders_for_day(params)
 
-            # 插入订单（逐条获取 id）
-            no_to_id = self._insert_orders_batch(orders)
+            # 插入堂食订单
+            no_to_id = {}
+            no_to_id.update(self._insert_dine_in_orders_batch(dine_in))
+            # 插入外卖订单
+            no_to_id.update(self._insert_takeout_orders_batch(takeout))
+            # 插入明细
             self._insert_items_batch(items, no_to_id)
 
             # 插入汇总
-            summary = self._aggregate_summary(params, orders, items)
+            summary = self._aggregate_summary(params, dine_in, takeout, items)
             self.execute("""
                 INSERT INTO daily_summary (store_id, summary_date, total_revenue, total_orders,
                     total_customers, avg_price, dine_in_revenue, takeout_revenue,
@@ -627,11 +722,12 @@ class DataGenerator:
                 summary["is_holiday"], summary["weather"], summary["temperature"],
             ))
 
-            total_orders += len(orders)
+            total_dine_in += len(dine_in)
+            total_takeout += len(takeout)
             total_items += len(items)
 
         self.commit()
-        return total_orders, total_items
+        return total_dine_in, total_takeout, total_items
 
     # --------------------------------------------------
     # 评论
@@ -683,86 +779,11 @@ class DataGenerator:
                 rt = datetime(rd.year, rd.month, rd.day, self.rand.randint(8, 21), self.rand.randint(0, 59))
                 all_reviews.append((sid, platform, rating, content, rd, rt, tags,
                                     1 if need_reply else 0, reply, is_pos))
-        # 批量插入
         batch = self.config["BATCH_REVIEW"]
         for i in range(0, len(all_reviews), batch):
             self.executemany(sql, all_reviews[i:i + batch])
             self.commit()
         print(f"    → 生成 {len(all_reviews)} 条评论")
-
-    # --------------------------------------------------
-    # 库存
-    # --------------------------------------------------
-    def generate_and_insert_inventory(self, store_ids: list[int]):
-        print(f"\n  生成库存数据...")
-        sql = """INSERT INTO inventory (store_id, dish_id, current_stock, min_stock, max_stock, unit, update_time)
-                 VALUES (%s,%s,%s,%s,%s,%s,NOW())"""
-        rows = []
-        for sid in store_ids:
-            for did in self.dish_ids:
-                mx = self.rand.randint(200, 600)
-                mn = self.rand.randint(30, 80)
-                cur = self.rand.randint(mn, mx)
-                rows.append((sid, did, cur, mn, mx, "份"))
-        self.executemany(sql, rows)
-        self.commit()
-        print(f"    → 生成 {len(rows)} 条库存记录")
-
-    # --------------------------------------------------
-    # 采购单
-    # --------------------------------------------------
-    def generate_and_insert_purchase_orders(self, store_ids: list[int]):
-        print(f"\n  生成采购单数据...")
-        # 先收集所有数据
-        po_list: list[tuple] = []
-        po_items_data: list[tuple] = []
-        po_counter = 1
-        for sid in store_ids:
-            current = self.start_date
-            while current <= self.end_date:
-                for _ in range(self.rand.randint(2, 3)):
-                    po_date = current + timedelta(days=self.rand.randint(0, 6))
-                    if po_date > self.end_date or po_date > date.today():
-                        continue
-                    order_no = f"PO{po_date.strftime('%Y%m%d')}{po_counter:06d}"
-                    po_counter += 1
-                    supplier = self.rand.choice(SUPPLIERS)
-                    n_items = self.rand.randint(5, 12)
-                    selected = self.rand.sample(self.dish_ids, min(n_items, len(self.dish_ids)))
-                    total_amt = 0.0
-                    for did in selected:
-                        price = round(self.dish_info[did]["price"] * self.rand.uniform(0.4, 0.6), 2)
-                        qty = self.rand.randint(20, 100)
-                        amt = round(price * qty, 2)
-                        total_amt += amt
-                        po_items_data.append((order_no, did, qty, price, amt))
-                    total_amt = round(total_amt, 2)
-                    status = self.rand.choices([0, 1, 2], weights=[5, 30, 65])[0]
-                    remark = self.rand.choice(["", "常规补货", "周末备货", "节假日备货", ""])
-                    po_list.append((sid, order_no, supplier, total_amt, status, po_date, remark))
-                current += timedelta(days=7)
-
-        # 批量插入采购单
-        self.execute("DELETE FROM purchase_order_item")
-        self.execute("DELETE FROM purchase_order")
-        o_sql = """INSERT INTO purchase_order (store_id, order_no, supplier, total_amount, status, order_date, remark, created_at)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,NOW())"""
-        self.executemany(o_sql, po_list)
-        self.commit()
-
-        # 批量回查采购单 ID
-        order_nos = [p[1] for p in po_list]
-        placeholders = ",".join(["%s"] * len(order_nos))
-        self.execute(f"SELECT order_no, id FROM purchase_order WHERE order_no IN ({placeholders})", order_nos)
-        no_to_id = {row[0]: row[1] for row in self.cursor.fetchall()}
-
-        # 批量插入采购明细
-        i_sql = """INSERT INTO purchase_order_item (purchase_order_id, dish_id, quantity, price, amount)
-                   VALUES (%s,%s,%s,%s,%s)"""
-        item_rows = [(no_to_id[no], did, qty, price, amt) for no, did, qty, price, amt in po_items_data]
-        self.executemany(i_sql, item_rows)
-        self.commit()
-        print(f"    → 生成 {len(po_list)} 条采购单, {len(item_rows)} 条采购明细")
 
     # --------------------------------------------------
     # 用户
@@ -801,27 +822,30 @@ class DataGenerator:
         t_start = time.time()
 
         # ── 1. 门店 ──
-        print("\n[1/7] 门店数据")
+        print("\n[1/6] 门店数据")
         store_ids = self.insert_stores(self.generate_stores())
 
         # ── 2. 菜品 ──
-        print("\n[2/7] 菜品数据")
+        print("\n[2/6] 菜品数据")
         self.generate_and_insert_dishes()
 
         # ── 3. 订单 + 营业数据（最耗时）──
-        print(f"\n[3/7] 订单数据（{len(store_ids)} 家门店 × {self.total_days} 天）")
-        grand_total_orders = 0
+        print(f"\n[3/5] 订单数据（{len(store_ids)} 家门店 × {self.total_days} 天）")
+        grand_total_dine_in = 0
+        grand_total_takeout = 0
         grand_total_items = 0
         store_idx = 0
         for sid in store_ids:
             store_idx += 1
-            o_count, i_count = self.process_store(sid)
-            grand_total_orders += o_count
-            grand_total_items += i_count
+            di, to, items = self.process_store(sid)
+            grand_total_dine_in += di
+            grand_total_takeout += to
+            grand_total_items += items
             if store_idx % 50 == 0 or store_idx == len(store_ids):
                 pct = store_idx / len(store_ids) * 100
                 print(f"    门店进度: {pct:.0f}% ({store_idx}/{len(store_ids)}), "
-                      f"已生成订单: {grand_total_orders}, 明细: {grand_total_items}")
+                      f"已生成订单: {grand_total_dine_in + grand_total_takeout}, "
+                      f"明细: {grand_total_items}")
 
         # ── 4. 评论 ──
         print("\n[4/5] 风评评论数据")
@@ -835,17 +859,20 @@ class DataGenerator:
         elapsed = time.time() - t_start
         print(f"\n{'=' * 60}")
         print(f"  ✓ 数据生成完成！耗时: {elapsed:.1f} 秒")
-        self.execute("SELECT COUNT(*) FROM orders")
+        self.execute("SELECT COUNT(*) FROM dine_in_order")
         r1 = self.cursor.fetchone()[0]
-        self.execute("SELECT COUNT(*) FROM order_item")
+        self.execute("SELECT COUNT(*) FROM takeout_order")
         r2 = self.cursor.fetchone()[0]
-        self.execute("SELECT COUNT(*) FROM daily_summary")
+        self.execute("SELECT COUNT(*) FROM order_item")
         r3 = self.cursor.fetchone()[0]
+        self.execute("SELECT COUNT(*) FROM daily_summary")
+        r4 = self.cursor.fetchone()[0]
         print(f"  ✓ 门店: {len(store_ids)} 家")
         print(f"  ✓ 菜品: {len(self.dish_ids)} 道")
-        print(f"  ✓ 订单: {r1} 条")
-        print(f"  ✓ 订单明细: {r2} 条")
-        print(f"  ✓ 营业汇总: {r3} 条")
+        print(f"  ✓ 堂食订单: {r1} 条")
+        print(f"  ✓ 外卖订单: {r2} 条")
+        print(f"  ✓ 订单明细: {r3} 条")
+        print(f"  ✓ 营业汇总: {r4} 条")
         print(f"{'=' * 60}")
 
 

@@ -56,36 +56,78 @@ CREATE TABLE `dish` (
 
 
 -- ===========================================
--- 3. 订单表
+-- 3. 会员表（暂不实现，保留 DDL 供后续启用）
+-- ===========================================
+DROP TABLE IF EXISTS `member`;
+CREATE TABLE `member` (
+    `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '会员ID',
+    `store_id`      INT             NOT NULL                 COMMENT '所属门店ID',
+    `name`          VARCHAR(50)     NOT NULL                 COMMENT '会员姓名',
+    `phone`         VARCHAR(20)     DEFAULT NULL             COMMENT '手机号',
+    `level`         TINYINT         DEFAULT 1                COMMENT '等级: 1普通 2银卡 3金卡 4钻石',
+    `points`        INT             DEFAULT 0                COMMENT '积分',
+    `total_spent`   DECIMAL(12,2)   DEFAULT 0.00             COMMENT '累计消费总额',
+    `total_orders`  INT             DEFAULT 0                COMMENT '累计消费次数',
+    `join_date`     DATE            NOT NULL                 COMMENT '注册日期',
+    `status`        TINYINT         DEFAULT 1                COMMENT '状态: 1正常 0冻结',
+    `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_store` (`store_id`),
+    CONSTRAINT `fk_member_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='会员信息表';
+
+
+-- ===========================================
+-- 4. 堂食订单表
 -- ===========================================
 DROP TABLE IF EXISTS `order_item`;
-DROP TABLE IF EXISTS `orders`;
-CREATE TABLE `orders` (
+DROP TABLE IF EXISTS `dine_in_order`;
+CREATE TABLE `dine_in_order` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
     `store_id`          INT             NOT NULL                 COMMENT '门店ID',
     `order_no`          VARCHAR(50)     NOT NULL                 COMMENT '订单号',
     `total_amount`      DECIMAL(10,2)   NOT NULL DEFAULT 0.00    COMMENT '订单总金额',
     `payment_method`    VARCHAR(20)     NOT NULL                 COMMENT '支付方式: 微信支付/支付宝支付/现金支付',
-    `order_type`        VARCHAR(20)     NOT NULL DEFAULT '堂食'   COMMENT '订单类型: 堂食/外卖',
+    `member_id`         INT             DEFAULT NULL             COMMENT '会员ID，NULL表示非会员订单',
     `dish_count`        TINYINT         NOT NULL DEFAULT 0       COMMENT '菜品数量(1~4)',
     `order_time`        DATETIME        NOT NULL                 COMMENT '下单时间',
     `created_at`        DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_order_no` (`order_no`),
-    KEY `idx_store_date` (`store_id`, `order_time`),
-    KEY `idx_order_time` (`order_time`),
-    KEY `idx_payment` (`payment_method`),
-    CONSTRAINT `fk_order_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='订单表';
+    KEY `idx_store_time` (`store_id`, `order_time`),
+    KEY `idx_member` (`member_id`),
+    CONSTRAINT `fk_dine_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`),
+    CONSTRAINT `fk_dine_member` FOREIGN KEY (`member_id`) REFERENCES `member`(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='堂食订单表';
 
 
 -- ===========================================
--- 4. 订单菜品明细表
+-- 5. 外卖订单表
 -- ===========================================
-DROP TABLE IF EXISTS `order_item`;
+DROP TABLE IF EXISTS `takeout_order`;
+CREATE TABLE `takeout_order` (
+    `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
+    `store_id`          INT             NOT NULL                 COMMENT '门店ID',
+    `order_no`          VARCHAR(50)     NOT NULL                 COMMENT '订单号',
+    `total_amount`      DECIMAL(10,2)   NOT NULL DEFAULT 0.00    COMMENT '订单总金额',
+    `platform`          VARCHAR(20)     NOT NULL                 COMMENT '外卖平台: 美团/饿了么/抖音',
+    `dish_count`        TINYINT         NOT NULL DEFAULT 0       COMMENT '菜品数量(1~4)',
+    `order_time`        DATETIME        NOT NULL                 COMMENT '下单时间',
+    `created_at`        DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_order_no` (`order_no`),
+    KEY `idx_store_time` (`store_id`, `order_time`),
+    KEY `idx_platform` (`platform`),
+    CONSTRAINT `fk_takeout_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='外卖订单表';
+
+
+-- ===========================================
+-- 6. 订单菜品明细表
+-- ===========================================
 CREATE TABLE `order_item` (
     `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '明细ID',
-    `order_id`      BIGINT          NOT NULL                 COMMENT '订单ID',
+    `order_id`      BIGINT          NOT NULL                 COMMENT '订单ID（关联堂食或外卖订单）',
     `store_id`      INT             NOT NULL                 COMMENT '门店ID',
     `dish_id`       INT             NOT NULL                 COMMENT '菜品ID',
     `dish_name`     VARCHAR(100)    NOT NULL                 COMMENT '菜品名称',
@@ -96,14 +138,13 @@ CREATE TABLE `order_item` (
     KEY `idx_order` (`order_id`),
     KEY `idx_store_dish` (`store_id`, `dish_id`),
     KEY `idx_order_store` (`order_id`, `store_id`),
-    CONSTRAINT `fk_oi_order` FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`),
     CONSTRAINT `fk_oi_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`),
     CONSTRAINT `fk_oi_dish` FOREIGN KEY (`dish_id`) REFERENCES `dish`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='订单菜品明细表';
 
 
 -- ===========================================
--- 5. 营业汇总表（每日每店一条记录）
+-- 7. 营业汇总表（每日每店一条记录）
 -- ===========================================
 DROP TABLE IF EXISTS `daily_summary`;
 CREATE TABLE `daily_summary` (
@@ -131,7 +172,7 @@ CREATE TABLE `daily_summary` (
 
 
 -- ===========================================
--- 6. 评论表（风评分析）
+-- 8. 评论表（风评分析）
 -- ===========================================
 DROP TABLE IF EXISTS `review`;
 CREATE TABLE `review` (
@@ -157,7 +198,7 @@ CREATE TABLE `review` (
 
 
 -- ===========================================
--- 7. 库存表（智能备菜）（暂不实现）
+-- 9. 库存表（智能备菜）（暂不实现）
 -- ===========================================
 -- DROP TABLE IF EXISTS `inventory`;
 -- CREATE TABLE `inventory` (
@@ -177,7 +218,7 @@ CREATE TABLE `review` (
 
 
 -- ===========================================
--- 8. 采购单表（智能备菜）（暂不实现）
+-- 10. 采购单表（智能备菜）（暂不实现）
 -- ===========================================
 -- DROP TABLE IF EXISTS `purchase_order`;
 -- CREATE TABLE `purchase_order` (
@@ -198,7 +239,7 @@ CREATE TABLE `review` (
 
 
 -- ===========================================
--- 9. 采购明细表（暂不实现）
+-- 11. 采购明细表（暂不实现）
 -- ===========================================
 -- DROP TABLE IF EXISTS `purchase_order_item`;
 -- CREATE TABLE `purchase_order_item` (
@@ -216,7 +257,7 @@ CREATE TABLE `review` (
 
 
 -- ===========================================
--- 10. 用户表（RBAC权限系统）
+-- 12. 用户表（RBAC权限系统）
 -- ===========================================
 DROP TABLE IF EXISTS `user`;
 CREATE TABLE `user` (
