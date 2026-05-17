@@ -29,8 +29,7 @@ CREATE TABLE `store` (
     `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    KEY `idx_city` (`city`),
-    KEY `idx_province` (`province`)
+    KEY `idx_city` (`city`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='门店信息表';
 
 
@@ -50,8 +49,7 @@ CREATE TABLE `dish` (
     `image_url`     VARCHAR(255)    DEFAULT NULL             COMMENT '图片URL',
     `status`        TINYINT         DEFAULT 1                COMMENT '状态: 1上架 0下架',
     `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_category` (`category`)
+    PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='菜品信息表';
 
 
@@ -93,8 +91,7 @@ CREATE TABLE `dine_in_order` (
     `created_at`        DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_order_no` (`order_no`),
-    KEY `idx_store_time` (`store_id`, `order_time`),
-    KEY `idx_member` (`member_id`)
+    KEY `idx_store_time` (`store_id`, `order_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='堂食订单表';
 
 
@@ -113,8 +110,7 @@ CREATE TABLE `takeout_order` (
     `created_at`        DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_order_no` (`order_no`),
-    KEY `idx_store_time` (`store_id`, `order_time`),
-    KEY `idx_platform` (`platform`)
+    KEY `idx_store_time` (`store_id`, `order_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='外卖订单表';
 
 
@@ -180,8 +176,6 @@ CREATE TABLE `review` (
     `is_positive`   TINYINT         DEFAULT 1                COMMENT '情感: 1正面 0中性 -1负面',
     `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
-    KEY `idx_store` (`store_id`),
-    KEY `idx_platform` (`platform`),
     KEY `idx_review_date` (`review_date`),
     KEY `idx_store_rating` (`store_id`, `rating`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='评论表';
@@ -258,9 +252,7 @@ CREATE TABLE `user` (
     `last_login`    DATETIME        DEFAULT NULL             COMMENT '最后登录时间',
     `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_username` (`username`),
-    KEY `idx_role` (`role`),
-    KEY `idx_store` (`store_id`)
+    UNIQUE KEY `uk_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 
