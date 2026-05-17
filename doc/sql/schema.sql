@@ -61,7 +61,7 @@ CREATE TABLE `dish` (
 DROP TABLE IF EXISTS `member`;
 CREATE TABLE `member` (
     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '会员ID',
-    `store_id`      INT             NOT NULL                 COMMENT '所属门店ID',
+    `store_id`      INT             NOT NULL                 COMMENT '所属门店ID，关联 store.id',
     `name`          VARCHAR(50)     NOT NULL                 COMMENT '会员姓名',
     `phone`         VARCHAR(20)     DEFAULT NULL             COMMENT '手机号',
     `level`         TINYINT         DEFAULT 1                COMMENT '等级: 1普通 2银卡 3金卡 4钻石',
@@ -72,8 +72,7 @@ CREATE TABLE `member` (
     `status`        TINYINT         DEFAULT 1                COMMENT '状态: 1正常 0冻结',
     `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
-    KEY `idx_store` (`store_id`),
-    CONSTRAINT `fk_member_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
+    KEY `idx_store` (`store_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='会员信息表';
 
 
@@ -84,20 +83,18 @@ DROP TABLE IF EXISTS `order_item`;
 DROP TABLE IF EXISTS `dine_in_order`;
 CREATE TABLE `dine_in_order` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
-    `store_id`          INT             NOT NULL                 COMMENT '门店ID',
+    `store_id`          INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
     `order_no`          VARCHAR(50)     NOT NULL                 COMMENT '订单号',
     `total_amount`      DECIMAL(10,2)   NOT NULL DEFAULT 0.00    COMMENT '订单总金额',
     `payment_method`    VARCHAR(20)     NOT NULL                 COMMENT '支付方式: 微信支付/支付宝支付/现金支付',
-    `member_id`         INT             DEFAULT NULL             COMMENT '会员ID，NULL表示非会员订单',
+    `member_id`         INT             DEFAULT NULL             COMMENT '会员ID（关联 member.id），NULL表示非会员',
     `dish_count`        TINYINT         NOT NULL DEFAULT 0       COMMENT '菜品数量(1~4)',
     `order_time`        DATETIME        NOT NULL                 COMMENT '下单时间',
     `created_at`        DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_order_no` (`order_no`),
     KEY `idx_store_time` (`store_id`, `order_time`),
-    KEY `idx_member` (`member_id`),
-    CONSTRAINT `fk_dine_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`),
-    CONSTRAINT `fk_dine_member` FOREIGN KEY (`member_id`) REFERENCES `member`(`id`)
+    KEY `idx_member` (`member_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='堂食订单表';
 
 
@@ -107,7 +104,7 @@ CREATE TABLE `dine_in_order` (
 DROP TABLE IF EXISTS `takeout_order`;
 CREATE TABLE `takeout_order` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
-    `store_id`          INT             NOT NULL                 COMMENT '门店ID',
+    `store_id`          INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
     `order_no`          VARCHAR(50)     NOT NULL                 COMMENT '订单号',
     `total_amount`      DECIMAL(10,2)   NOT NULL DEFAULT 0.00    COMMENT '订单总金额',
     `platform`          VARCHAR(20)     NOT NULL                 COMMENT '外卖平台: 美团/饿了么/抖音',
@@ -117,8 +114,7 @@ CREATE TABLE `takeout_order` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_order_no` (`order_no`),
     KEY `idx_store_time` (`store_id`, `order_time`),
-    KEY `idx_platform` (`platform`),
-    CONSTRAINT `fk_takeout_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
+    KEY `idx_platform` (`platform`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='外卖订单表';
 
 
@@ -128,18 +124,15 @@ CREATE TABLE `takeout_order` (
 CREATE TABLE `order_item` (
     `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '明细ID',
     `order_id`      BIGINT          NOT NULL                 COMMENT '订单ID（关联堂食或外卖订单）',
-    `store_id`      INT             NOT NULL                 COMMENT '门店ID',
-    `dish_id`       INT             NOT NULL                 COMMENT '菜品ID',
+    `store_id`      INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
+    `dish_id`       INT             NOT NULL                 COMMENT '菜品ID，关联 dish.id',
     `dish_name`     VARCHAR(100)    NOT NULL                 COMMENT '菜品名称',
     `quantity`      INT             NOT NULL DEFAULT 1        COMMENT '数量',
     `price`         DECIMAL(10,2)   NOT NULL                 COMMENT '单价',
     `amount`        DECIMAL(10,2)   NOT NULL                 COMMENT '小计金额',
     PRIMARY KEY (`id`),
     KEY `idx_order` (`order_id`),
-    KEY `idx_store_dish` (`store_id`, `dish_id`),
-    KEY `idx_order_store` (`order_id`, `store_id`),
-    CONSTRAINT `fk_oi_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`),
-    CONSTRAINT `fk_oi_dish` FOREIGN KEY (`dish_id`) REFERENCES `dish`(`id`)
+    KEY `idx_store_dish` (`store_id`, `dish_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='订单菜品明细表';
 
 
@@ -165,9 +158,7 @@ CREATE TABLE `daily_summary` (
     `created_at`        DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_store_date` (`store_id`, `summary_date`),
-    KEY `idx_date` (`summary_date`),
-    KEY `idx_store_date` (`store_id`, `summary_date`),
-    CONSTRAINT `fk_ds_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
+    KEY `idx_date` (`summary_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='营业汇总表';
 
 
@@ -177,7 +168,7 @@ CREATE TABLE `daily_summary` (
 DROP TABLE IF EXISTS `review`;
 CREATE TABLE `review` (
     `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '评论ID',
-    `store_id`      INT             NOT NULL                 COMMENT '门店ID',
+    `store_id`      INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
     `platform`      VARCHAR(20)     NOT NULL                 COMMENT '平台: 美团/饿了么/大众点评',
     `rating`        TINYINT         NOT NULL                 COMMENT '评分: 1-5星',
     `content`       TEXT            NOT NULL                 COMMENT '评论内容',
@@ -191,9 +182,8 @@ CREATE TABLE `review` (
     PRIMARY KEY (`id`),
     KEY `idx_store` (`store_id`),
     KEY `idx_platform` (`platform`),
-    KEY `idx_rating` (`rating`),
     KEY `idx_review_date` (`review_date`),
-    CONSTRAINT `fk_review_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
+    KEY `idx_store_rating` (`store_id`, `rating`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='评论表';
 
 
@@ -211,9 +201,7 @@ CREATE TABLE `review` (
 --     `unit`          VARCHAR(10)     DEFAULT '份'              COMMENT '单位',
 --     `update_time`   DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
 --     PRIMARY KEY (`id`),
---     UNIQUE KEY `uk_store_dish` (`store_id`, `dish_id`),
---     CONSTRAINT `fk_inv_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`),
---     CONSTRAINT `fk_inv_dish` FOREIGN KEY (`dish_id`) REFERENCES `dish`(`id`)
+--     UNIQUE KEY `uk_store_dish` (`store_id`, `dish_id`)
 -- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存表';
 
 
@@ -233,8 +221,7 @@ CREATE TABLE `review` (
 --     `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
 --     PRIMARY KEY (`id`),
 --     UNIQUE KEY `uk_order_no` (`order_no`),
---     KEY `idx_store_date` (`store_id`, `order_date`),
---     CONSTRAINT `fk_po_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
+--     KEY `idx_store_date` (`store_id`, `order_date`)
 -- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采购单表';
 
 
@@ -250,9 +237,7 @@ CREATE TABLE `review` (
 --     `price`             DECIMAL(10,2)   NOT NULL                 COMMENT '单价',
 --     `amount`            DECIMAL(12,2)   NOT NULL                 COMMENT '小计金额',
 --     PRIMARY KEY (`id`),
---     KEY `idx_purchase_order` (`purchase_order_id`),
---     CONSTRAINT `fk_poi_order` FOREIGN KEY (`purchase_order_id`) REFERENCES `purchase_order`(`id`),
---     CONSTRAINT `fk_poi_dish` FOREIGN KEY (`dish_id`) REFERENCES `dish`(`id`)
+--     KEY `idx_purchase_order` (`purchase_order_id`)
 -- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采购明细表';
 
 
@@ -266,7 +251,7 @@ CREATE TABLE `user` (
     `password_hash` VARCHAR(255)    NOT NULL                 COMMENT '密码哈希',
     `display_name`  VARCHAR(100)    DEFAULT NULL             COMMENT '显示名称',
     `role`          VARCHAR(20)     NOT NULL                 COMMENT '角色: boss/employee/franchisee',
-    `store_id`      INT             DEFAULT NULL             COMMENT '关联门店(boss/employee可为null)',
+    `store_id`      INT             DEFAULT NULL             COMMENT '关联门店(boss/employee可为null)，关联 store.id',
     `phone`         VARCHAR(20)     DEFAULT NULL             COMMENT '手机号',
     `email`         VARCHAR(100)    DEFAULT NULL             COMMENT '邮箱',
     `status`        TINYINT         DEFAULT 1                COMMENT '状态: 1启用 0禁用',
@@ -275,12 +260,7 @@ CREATE TABLE `user` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_username` (`username`),
     KEY `idx_role` (`role`),
-    KEY `idx_store` (`store_id`),
-    CONSTRAINT `fk_user_store` FOREIGN KEY (`store_id`) REFERENCES `store`(`id`)
+    KEY `idx_store` (`store_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 
--- ===========================================
--- 额外索引（CREATE TABLE 中未覆盖的）
--- ===========================================
-ALTER TABLE `review` ADD INDEX `idx_store_rating` (`store_id`, `rating`);
