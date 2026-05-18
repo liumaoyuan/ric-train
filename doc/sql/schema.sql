@@ -149,8 +149,6 @@ CREATE TABLE `daily_summary` (
     `peak_hour_revenue` DECIMAL(12,2)   DEFAULT NULL              COMMENT '高峰时段收入(11:00-13:00, 18:00-20:00)',
     `dish_total_count`  INT             NOT NULL DEFAULT 0        COMMENT '菜品销售总份数',
     `is_holiday`        TINYINT         NOT NULL DEFAULT 0         COMMENT '是否节假日: 0否 1是',
-    `weather`           VARCHAR(20)     DEFAULT NULL              COMMENT '天气: 晴/多云/雨/雪等',
-    `temperature`       DECIMAL(4,1)    DEFAULT NULL              COMMENT '温度(℃)',
     `created_at`        DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_store_date` (`store_id`, `summary_date`),

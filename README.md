@@ -1,38 +1,59 @@
-# FastAPI AI 便捷开发脚手架 项目
+# 连锁餐饮 AI 系统
 
-TODO: 以后再写
+基于 FastAPI + LangChain + AI 的连锁餐饮智能管理系统。
 
+## 项目结构
 
-## 常用命令备忘录
-这是实际开发中打包镜像 部署docker容器时会用的命令  [wolin-ai:0.1.5] 镜像名和版本可自行修改 
-
-``` bash 
-docker build -t wolin-ai:0.1.10 .
-
-
-docker save -o wolin-ai-0.1.10.tar wolin-ai:0.1.10
-
-
-docker load -i wolin-ai-0.1.10.tar
-
-
-docker run -p 8000:8000 --env-file .env -d -v ai_upload_volume:/app/uploads --name wolin-ai-0110 wolin-ai:0.1.10
-docker run --name wolin-ai -p 8000:8000 --env-file .env --restart unless-stopped wolin-ai:0.1.10
+```
+├── app/                        # 应用主代码
+├── Base/                       # 基础模块
+├── doc/
+│   └── sql/
+│       ├── schema.sql          # 数据库表结构 DDL
+│       ├── generate_data.py    # 模拟数据生成脚本
+│       └── README.md           # 数据生成使用说明
+├── requirements.txt
+└── README.md
 ```
 
+## 模拟数据生成
 
-  docker run -d \
-  --name minio \
-  --restart=unless-stopped \
-  -p 9000:9000 \
-  -p 9001:9001 \
-  -e MINIO_ROOT_USER="xxx" \
-  -e MINIO_ROOT_PASSWORD="xxxAr!" \
-  -v minio_data:/data \
-  minio/minio \
-    server /data --address "0.0.0.0:9000" --console-address "0.0.0.0:9001"
-  
+数据生成脚本位于 `doc/sql/` 目录，用于生成门店营业模拟数据。
 
-uvicorn Wolin.main:app --host 0.0.0.0 --port 8001
+### 生成的数据范围
 
+- **门店**: 500 家，均匀分布全国 31 个省级行政区
+- **菜品**: 56 道中式快餐常见菜品
+- **订单**: 堂食 + 外卖订单，含订单明细
+- **营业汇总**: 每日每店聚合数据
+- **评论**: 模拟美团、饿了么、大众点评等平台评论
+- **用户**: 总部管理员 + 员工 + 加盟商账号
+
+### 生成策略
+
+- **按天循环**: 从 2023-01-01 开始逐天生成，而非逐店生成
+- **门店随机选取**: 每天随机选取 85%~95% 的营业门店
+- **每月提交**: 月份切换时提交数据库，大幅减少 I/O
+- **价格统一**: 同一门店的同一种菜品价格始终一致
+- **高峰时段**: 下单时间集中在午餐（11:00-13:00）和晚餐（17:00-19:00）
+
+### 使用方法
+
+```bash
+cd doc/sql
+python generate_data.py
+```
+
+可通过环境变量配置数据库连接：
+```bash
+DB_HOST=localhost DB_PORT=3306 DB_USER=root DB_PASSWORD=xxx python generate_data.py
+```
+
+详细说明见 `doc/sql/README.md`。
+
+## 常用命令
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8001
 pip freeze > requirements.txt
+```

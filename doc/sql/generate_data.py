@@ -4,7 +4,7 @@
 
 生成数据范围：
   - 门店: 500 家，均匀分布全国各省市
-  - 菜品: 31 道中式快餐常见菜品
+  - 菜品: 56 道中式快餐常见菜品
   - 会员: 每店 30~80 名会员
   - 堂食订单: 区分会员订单与非会员订单，含支付方式
   - 外卖订单: 记录外卖平台（美团/饿了么/抖音），无支付方式
@@ -12,6 +12,13 @@
   - 营业汇总: 每日每店聚合
   - 评论: 模拟各平台用户评论
   - 用户: 总部 + 员工 + 加盟商账号
+
+生成策略优化：
+  - 按天循环：从 START_DATE 开始逐天生成，而非逐店生成
+  - 全量门店：当天所有营业门店均生成数据，处理顺序随机
+  - 每月提交：每月切换时提交一次数据库，大幅减少提交次数
+  - 价格统一：同一门店的同一种菜品价格始终保持一致
+  - 订单时间集中在午餐（11:00-13:00）和晚餐（17:00-19:00）高峰
 
 使用方法:
   python generate_data.py
@@ -45,7 +52,7 @@ CONFIG = {
     "DB_USER": os.getenv("DB_USER", "root"),
     "DB_PASSWORD": os.getenv("DB_PASSWORD", "liu12138"),
     "DB_NAME": os.getenv("DB_NAME", "catering_ai_system"),
-    "START_DATE": "2024-01-01",
+    "START_DATE": "2023-01-01想·",
     "END_DATE": "2026-05-17",
     "STORE_COUNT": 500,
     "BATCH_ORDERS": 5000,       # orders 批量插入
@@ -123,7 +130,7 @@ GIVEN_NAMES = ["伟", "芳", "娜", "秀英", "敏", "静", "丽", "强", "磊",
                "刚", "桂英", "文", "华", "飞", "红", "斌", "玲", "军", "建华"]
 
 # ============================================================
-# 菜品数据（31 道）
+# 菜品数据（56 道）
 # ============================================================
 # (name, category, price, cost, spicy, popularity)
 DISHES = [
@@ -141,35 +148,105 @@ DISHES = [
     ("小炒肉",       "热菜", 20.0, 11.0, 2, 78),
     ("红烧排骨",     "热菜", 32.0, 18.0, 0, 70),
     ("蒜蓉青菜",     "热菜", 12.0, 5.0,  0, 76),
+    ("醋溜白菜",     "热菜", 12.0, 5.0,  0, 75),
+    ("地三鲜",       "热菜", 16.0, 8.0,  0, 78),
+    ("红烧茄子",     "热菜", 14.0, 7.0,  0, 80),
+    ("土豆炖牛肉",   "热菜", 28.0, 16.0, 0, 72),
+    ("京酱肉丝",     "热菜", 22.0, 12.0, 1, 70),
+    ("糖醋里脊",     "热菜", 26.0, 14.0, 0, 74),
+    ("干煸四季豆",   "热菜", 14.0, 7.0,  1, 68),
+    ("辣子鸡",       "热菜", 24.0, 13.0, 2, 62),
+    ("啤酒鸭",       "热菜", 26.0, 14.0, 1, 58),
+    ("葱爆羊肉",     "热菜", 30.0, 17.0, 0, 65),
+    ("毛血旺",       "热菜", 32.0, 18.0, 3, 55),
     # 凉菜
     ("凉拌黄瓜",     "凉菜", 8.0,  3.0,  1, 70),
     ("皮蛋豆腐",     "凉菜", 10.0, 4.0,  0, 65),
     ("口水鸡",       "凉菜", 16.0, 8.0,  2, 60),
     ("凉拌木耳",     "凉菜", 10.0, 4.0,  1, 62),
+    ("凉拌海带丝",   "凉菜", 8.0,  3.0,  0, 55),
+    ("酱牛肉",       "凉菜", 22.0, 12.0, 0, 50),
+    ("拍黄瓜",       "凉菜", 8.0,  3.0,  1, 60),
     # 主食
     ("米饭",         "主食", 3.0,  1.0,  0, 99),
     ("馒头",         "主食", 2.0,  0.8,  0, 60),
     ("蛋炒饭",       "主食", 12.0, 5.0,  0, 75),
     ("炒面",         "主食", 14.0, 6.0,  0, 68),
+    ("饺子",         "主食", 15.0, 7.0,  0, 70),
+    ("馄饨",         "主食", 12.0, 5.0,  0, 58),
+    ("炒河粉",       "主食", 12.0, 5.0,  0, 62),
+    ("炒米粉",       "主食", 12.0, 5.0,  0, 60),
     # 汤品
     ("紫菜蛋花汤",   "汤品", 6.0,  2.0,  0, 65),
     ("番茄蛋汤",     "汤品", 6.0,  2.0,  0, 60),
     ("酸辣汤",       "汤品", 8.0,  3.0,  1, 55),
+    ("冬瓜排骨汤",   "汤品", 10.0, 4.0,  0, 50),
+    ("西红柿牛腩汤", "汤品", 12.0, 5.0,  0, 48),
+    ("玉米排骨汤",   "汤品", 10.0, 4.0,  0, 52),
     # 饮品
     ("可乐",         "饮品", 5.0,  2.0,  0, 50),
     ("雪碧",         "饮品", 5.0,  2.0,  0, 48),
     ("冰红茶",       "饮品", 5.0,  2.0,  0, 45),
     ("酸梅汤",       "饮品", 6.0,  2.5,  0, 55),
+    ("豆浆",         "饮品", 4.0,  1.5,  0, 40),
+    ("柠檬茶",       "饮品", 6.0,  2.0,  0, 38),
     # 配菜
     ("卤蛋",         "配菜", 3.0,  1.5,  0, 50),
     ("鸡腿",         "配菜", 8.0,  4.5,  0, 65),
     ("烤肠",         "配菜", 4.0,  2.0,  0, 45),
+    ("煎蛋",         "配菜", 2.0,  1.0,  0, 45),
+    ("豆腐干",       "配菜", 3.0,  1.5,  0, 35),
 ]
 
 # ============================================================
-# 节假日（2025 年）
+# 节假日（2023 ~ 2026）
 # ============================================================
 HOLIDAYS = {
+    # 2023 年
+    date(2023, 1, 1): ("元旦", 1.3),
+    date(2023, 1, 22): ("春节初一", 1.6),
+    date(2023, 1, 23): ("春节初二", 1.5),
+    date(2023, 1, 24): ("春节初三", 1.4),
+    date(2023, 4, 5): ("清明节", 1.2),
+    date(2023, 4, 29): ("劳动节", 1.3),
+    date(2023, 4, 30): ("劳动节", 1.3),
+    date(2023, 5, 1): ("劳动节", 1.4),
+    date(2023, 5, 2): ("劳动节", 1.3),
+    date(2023, 5, 3): ("劳动节", 1.2),
+    date(2023, 6, 22): ("端午节", 1.3),
+    date(2023, 9, 29): ("中秋节", 1.3),
+    date(2023, 10, 1): ("国庆节", 1.5),
+    date(2023, 10, 2): ("国庆节", 1.5),
+    date(2023, 10, 3): ("国庆节", 1.4),
+    date(2023, 10, 4): ("国庆节", 1.4),
+    date(2023, 10, 5): ("国庆节", 1.3),
+    date(2023, 10, 6): ("国庆节", 1.2),
+    # 2024 年
+    date(2024, 1, 1): ("元旦", 1.3),
+    date(2024, 2, 10): ("春节初一", 1.6),
+    date(2024, 2, 11): ("春节初二", 1.5),
+    date(2024, 2, 12): ("春节初三", 1.5),
+    date(2024, 2, 13): ("春节初四", 1.4),
+    date(2024, 2, 14): ("春节初五", 1.4),
+    date(2024, 2, 15): ("春节初六", 1.3),
+    date(2024, 2, 16): ("春节初七", 1.3),
+    date(2024, 4, 4): ("清明节", 1.2),
+    date(2024, 4, 5): ("清明节", 1.2),
+    date(2024, 5, 1): ("劳动节", 1.4),
+    date(2024, 5, 2): ("劳动节", 1.3),
+    date(2024, 5, 3): ("劳动节", 1.3),
+    date(2024, 5, 4): ("劳动节", 1.2),
+    date(2024, 5, 5): ("劳动节", 1.2),
+    date(2024, 6, 10): ("端午节", 1.3),
+    date(2024, 9, 17): ("中秋节", 1.3),
+    date(2024, 10, 1): ("国庆节", 1.5),
+    date(2024, 10, 2): ("国庆节", 1.5),
+    date(2024, 10, 3): ("国庆节", 1.4),
+    date(2024, 10, 4): ("国庆节", 1.4),
+    date(2024, 10, 5): ("国庆节", 1.3),
+    date(2024, 10, 6): ("国庆节", 1.3),
+    date(2024, 10, 7): ("国庆节", 1.2),
+    # 2025 年
     date(2025, 1, 1): ("元旦", 1.3),
     date(2025, 1, 28): ("除夕", 1.5),
     date(2025, 1, 29): ("春节初一", 1.6),
@@ -198,7 +275,7 @@ HOLIDAYS = {
     date(2025, 10, 6): ("中秋节", 1.4),
     date(2025, 10, 7): ("国庆节", 1.2),
     date(2025, 12, 31): ("跨年", 1.2),
-    # 2026 年节日（截至 2026-05-17）
+    # 2026 年（截至 2026-05-17）
     date(2026, 1, 1): ("元旦", 1.3),
     date(2026, 2, 16): ("除夕", 1.5),
     date(2026, 2, 17): ("春节初一", 1.6),
@@ -219,14 +296,8 @@ WEEKEND_MULTIPLIER = 1.12
 SEASON_MULTIPLIERS = {1: 0.95, 2: 0.90, 3: 0.95, 4: 1.05, 5: 1.08, 6: 1.12,
                       7: 1.15, 8: 1.12, 9: 1.05, 10: 1.02, 11: 0.95, 12: 0.90}
 
-WEATHER_OPTIONS = {
-    "spring": [("晴", 0.35), ("多云", 0.30), ("阴", 0.15), ("雨", 0.15), ("暴雨", 0.05)],
-    "summer": [("晴", 0.30), ("多云", 0.25), ("阴", 0.10), ("雨", 0.20), ("暴雨", 0.10), ("台风", 0.05)],
-    "autumn": [("晴", 0.40), ("多云", 0.30), ("阴", 0.15), ("雨", 0.10), ("雾", 0.05)],
-    "winter": [("晴", 0.30), ("多云", 0.25), ("阴", 0.15), ("雪", 0.10), ("雨夹雪", 0.05), ("雾霾", 0.15)],
-}
-
 # 订单时间分布权重（每半小时时段，8:00-21:00）
+# 主要集中在午餐（11:00-13:00）和晚餐（17:00-19:00）高峰
 ORDER_TIME_DIST = [
     (8, 0, 0.02), (8, 30, 0.03),       # 早餐/早间
     (9, 0, 0.02), (9, 30, 0.02),
@@ -322,6 +393,9 @@ class DataGenerator:
         # 累计订单号计数器（全局唯一）
         self.order_no_counter = 1
 
+        # (store_id, dish_id) -> price（确保同店同菜价格一致）
+        self.store_dish_prices: dict[tuple[int, int], float] = {}
+
     # --------------------------------------------------
     # 数据库连接
     # --------------------------------------------------
@@ -375,7 +449,7 @@ class DataGenerator:
                     "district": f"{area_code}区",
                     "address": f"{city}模拟路{self.rand.randint(1, 500)}号",
                     "phone": f"1{self.rand.randint(30, 99)}{self.rand.randint(10000000, 99999999)}",
-                    "open_date": date(2023, 7, 1) + timedelta(days=self.rand.randint(0, 913)),
+                    "open_date": date(2023, 1, 1) + timedelta(days=self.rand.randint(0, 913)),
                     "status": 1,
                     "level": self.rand.choices([1, 2, 3], weights=[10, 60, 30])[0],
                 })
@@ -432,15 +506,12 @@ class DataGenerator:
             for _ in range(n_members):
                 name = self.rand.choice(SURNAMES) + self.rand.choice(GIVEN_NAMES)
                 phone = f"1{self.rand.randint(30, 99)}{self.rand.randint(10000000, 99999999)}"
-                # 注册日期在门店开业后
                 jd = open_date + timedelta(days=self.rand.randint(0, max(0, store_days - 1)))
-                # 根据注册时长和活跃度生成累计消费
                 days_since_join = (self.end_date - jd).days
                 avg_order = self.rand.uniform(18, 35)
-                freq = self.rand.uniform(0.03, 0.12)  # 日均消费概率
+                freq = self.rand.uniform(0.03, 0.12)
                 total_orders = max(1, int(days_since_join * freq))
                 total_spent = round(total_orders * avg_order, 2)
-                # 等级
                 if total_spent >= 5000:
                     level = 4
                 elif total_spent >= 2000:
@@ -453,32 +524,14 @@ class DataGenerator:
                 store_members.append((sid, name, phone, level, points, total_spent, total_orders, jd, 1))
             self.executemany(sql, store_members)
             self.commit()
-            # 回查 member_id
             self.execute("SELECT id FROM member WHERE store_id = %s ORDER BY id", (sid,))
             self.member_ids[sid] = [r[0] for r in self.cursor.fetchall()]
         total = sum(len(v) for v in self.member_ids.values())
         print(f"    → 生成 {total} 条会员记录")
 
     # --------------------------------------------------
-    # 天气/季节辅助
+    # 营业参数辅助
     # --------------------------------------------------
-    def _get_season(self, month: int) -> str:
-        if 3 <= month <= 5:
-            return "spring"
-        elif 6 <= month <= 8:
-            return "summer"
-        elif 9 <= month <= 11:
-            return "autumn"
-        return "winter"
-
-    def _get_weather_and_temp(self, month: int) -> tuple[str, float]:
-        season = self._get_season(month)
-        opts = WEATHER_OPTIONS[season]
-        weather = self.rand.choices([w for w, _ in opts], [p for _, p in opts])[0]
-        temp_ranges = {"spring": (8, 22), "summer": (25, 38), "autumn": (10, 25), "winter": (-10, 10)}
-        low, high = temp_ranges[season]
-        return weather, round(self.rand.uniform(low, high), 1)
-
     def _calc_daily_params(self, store_id: int, d: date) -> dict | None:
         """计算单店单日营业参数，返回 None 表示休息"""
         store_level = ((store_id - 1) % 3) + 1
@@ -499,15 +552,12 @@ class DataGenerator:
                 return None
 
         season_mult = SEASON_MULTIPLIERS[d.month]
-        weather, temp = self._get_weather_and_temp(d.month)
-        weather_mult = {"暴雨": 0.75, "台风": 0.75, "暴雪": 0.75, "雨": 0.90, "雪": 0.90, "雾霾": 0.85}.get(weather, 1.0)
 
-        total_mult = level_mult * weekday_mult * day_of_week_mult * holiday_mult * season_mult * weather_mult
+        total_mult = level_mult * weekday_mult * day_of_week_mult * holiday_mult * season_mult
         revenue = base_revenue * total_mult * self.rand.uniform(0.88, 1.12)
         revenue = max(500, round(revenue, 2))
 
         avg_price = round(self.rand.uniform(22, 38), 1)
-        # 外卖占比 15%~40%
         takeout_ratio = self.rand.uniform(0.15, 0.40)
         order_count = max(1, int(revenue / avg_price))
 
@@ -519,10 +569,19 @@ class DataGenerator:
             "order_count": order_count,
             "takeout_ratio": takeout_ratio,
             "is_holiday": is_holiday,
-            "weather": weather,
-            "temperature": temp,
             "weekday": weekday,
         }
+
+    # --------------------------------------------------
+    # 菜品价格（同一门店同一种菜品价格一致）
+    # --------------------------------------------------
+    def _get_store_dish_price(self, store_id: int, dish_id: int) -> float:
+        key = (store_id, dish_id)
+        if key not in self.store_dish_prices:
+            base_price = self.dish_info[dish_id]["price"]
+            price = round(base_price * self.rand.uniform(0.96, 1.04), 1)
+            self.store_dish_prices[key] = price
+        return self.store_dish_prices[key]
 
     # --------------------------------------------------
     # 订单生成（核心）
@@ -539,7 +598,6 @@ class DataGenerator:
         dish_ids = self.dish_ids
         pop_weights = [self.dish_info[did]["popularity"] for did in dish_ids]
 
-        # 该门店的会员列表
         members = self.member_ids.get(sid, [])
 
         dine_in_orders: list[dict] = []
@@ -547,19 +605,15 @@ class DataGenerator:
         items: list[dict] = []
 
         for _ in range(order_count):
-            # 菜品数量 1~4
             n_dishes = self.rand.choices([1, 2, 3, 4], weights=[15, 35, 33, 17])[0]
-
-            # 按 popularity 加权选菜（允许重复）
             selected_dish_ids = self.rand.choices(dish_ids, weights=pop_weights, k=n_dishes)
 
             total = 0.0
             order_items = []
             for did in selected_dish_ids:
                 info = self.dish_info[did]
-                # 价格微浮动 ±8%
-                price = round(info["price"] * self.rand.uniform(0.94, 1.06), 1)
-                qty = 1
+                price = self._get_store_dish_price(sid, did)
+                qty = self.rand.choices([1, 2, 3], weights=[70, 25, 5])[0]
                 amount = round(price * qty, 2)
                 total += amount
                 order_items.append({
@@ -572,7 +626,7 @@ class DataGenerator:
 
             total = round(total, 2)
 
-            # 分配时间
+            # 按时间分布权重生成下单时间
             time_idx = self.rand.choices(range(len(ORDER_TIME_DIST)),
                                           weights=[p for _, _, p in ORDER_TIME_DIST])[0]
             h, m, _ = ORDER_TIME_DIST[time_idx]
@@ -582,7 +636,6 @@ class DataGenerator:
             order_no = f"ORD{d.strftime('%Y%m%d')}{self.order_no_counter:08d}"
             self.order_no_counter += 1
 
-            # 判断订单类型
             is_takeout = self.rand.random() < takeout_ratio
 
             if is_takeout:
@@ -599,7 +652,6 @@ class DataGenerator:
                 pay_method = self.rand.choices(
                     ["微信支付", "支付宝支付", "现金支付"], weights=[50, 35, 15]
                 )[0]
-                # 50% 概率是会员订单
                 member_id = None
                 if members and self.rand.random() < 0.5:
                     member_id = self.rand.choice(members)
@@ -632,7 +684,9 @@ class DataGenerator:
                                             member_id, dish_count, order_time, created_at)
                  VALUES (%(store_id)s, %(order_no)s, %(total_amount)s, %(payment_method)s,
                          %(member_id)s, %(dish_count)s, %(order_time)s, NOW())"""
-        self.executemany(sql, orders)
+        batch_size = self.config["BATCH_ORDERS"]
+        for i in range(0, len(orders), batch_size):
+            self.executemany(sql, orders[i:i + batch_size])
         order_nos = [o["order_no"] for o in orders]
         placeholders = ",".join(["%s"] * len(order_nos))
         self.execute(f"SELECT order_no, id FROM dine_in_order WHERE order_no IN ({placeholders})", order_nos)
@@ -646,7 +700,9 @@ class DataGenerator:
                                             dish_count, order_time, created_at)
                  VALUES (%(store_id)s, %(order_no)s, %(total_amount)s, %(platform)s,
                          %(dish_count)s, %(order_time)s, NOW())"""
-        self.executemany(sql, orders)
+        batch_size = self.config["BATCH_ORDERS"]
+        for i in range(0, len(orders), batch_size):
+            self.executemany(sql, orders[i:i + batch_size])
         order_nos = [o["order_no"] for o in orders]
         placeholders = ",".join(["%s"] * len(order_nos))
         self.execute(f"SELECT order_no, id FROM takeout_order WHERE order_no IN ({placeholders})", order_nos)
@@ -668,7 +724,9 @@ class DataGenerator:
                     it["quantity"], it["price"], it["amount"],
                 ))
         if rows:
-            self.executemany(sql, rows)
+            batch_size = self.config["BATCH_ITEMS"]
+            for i in range(0, len(rows), batch_size):
+                self.executemany(sql, rows[i:i + batch_size])
 
     def _aggregate_summary(self, params: dict, dine_in: list[dict], takeout: list[dict], items: list[dict]) -> dict:
         """从堂食和外卖订单聚合出 daily_summary"""
@@ -698,54 +756,113 @@ class DataGenerator:
             "peak_hour_revenue": peak_rev,
             "dish_total_count": dish_total,
             "is_holiday": params["is_holiday"],
-            "weather": params["weather"],
-            "temperature": params["temperature"],
         }
 
-    def process_store(self, store_id: int, open_date: date) -> tuple[int, int, int]:
-        """处理一个门店从开业到结束所有天的数据，返回 (堂食订单数, 外卖订单数, 总明细数)"""
-        total_dine_in = 0
-        total_takeout = 0
-        total_items = 0
-        store_days = (self.end_date - open_date).days + 1
+    # --------------------------------------------------
+    # 按天生成订单（核心优化）
+    # --------------------------------------------------
+    def _process_orders_day_by_day(self, store_ids: list[int]) -> tuple[int, int, int]:
+        """
+        按天循环生成所有门店订单数据。
+        所有营业门店均生成数据，每月提交一次数据库。
+        """
+        total_days = (self.end_date - self.start_date).days + 1
+        grand_dine_in = 0
+        grand_takeout = 0
+        grand_items = 0
+        last_month = None
 
-        for day_offset in range(store_days):
-            d = open_date + timedelta(days=day_offset)
-            params = self._calc_daily_params(store_id, d)
-            if params is None:
+        for day_offset in range(total_days):
+            d = self.start_date + timedelta(days=day_offset)
+            curr_month = (d.year, d.month)
+
+            if last_month is None:
+                last_month = curr_month
+
+            # 获取当天已开业的门店
+            open_stores = [sid for sid in store_ids if self.store_dates[sid] <= d]
+            if not open_stores:
                 continue
 
-            dine_in, takeout, items = self._generate_orders_for_day(params)
+            # 所有营业门店都生成数据，仅打乱处理顺序
+            self.rand.shuffle(open_stores)
+            selected_stores = open_stores
 
-            # 插入堂食订单
+            # 收集当天所有订单
+            all_dine_in: list[dict] = []
+            all_takeout: list[dict] = []
+            all_items: list[dict] = []
+            all_summaries: list[dict] = []
+
+            for sid in selected_stores:
+                params = self._calc_daily_params(sid, d)
+                if params is None:
+                    continue
+
+                dine_in, takeout, items = self._generate_orders_for_day(params)
+                all_dine_in.extend(dine_in)
+                all_takeout.extend(takeout)
+                all_items.extend(items)
+                all_summaries.append(self._aggregate_summary(params, dine_in, takeout, items))
+
+            # 按下单时间升序排列，使订单 ID 顺序与时间顺序一致
+            all_dine_in.sort(key=lambda o: o["order_time"])
+            all_takeout.sort(key=lambda o: o["order_time"])
+
+            # 按时间顺序重新分配订单号，确保 order_no 严格按时间递增
+            old_to_new = {}
+            for order in all_dine_in + all_takeout:
+                new_no = f"ORD{d.strftime('%Y%m%d')}{self.order_no_counter:08d}"
+                self.order_no_counter += 1
+                old_to_new[order["order_no"]] = new_no
+                order["order_no"] = new_no
+            for item in all_items:
+                item["order_no"] = old_to_new[item["order_no"]]
+
+            # 批量插入当天订单
             no_to_id = {}
-            no_to_id.update(self._insert_dine_in_orders_batch(dine_in))
-            # 插入外卖订单
-            no_to_id.update(self._insert_takeout_orders_batch(takeout))
-            # 插入明细
-            self._insert_items_batch(items, no_to_id)
+            no_to_id.update(self._insert_dine_in_orders_batch(all_dine_in))
+            no_to_id.update(self._insert_takeout_orders_batch(all_takeout))
+            self._insert_items_batch(all_items, no_to_id)
 
-            # 插入汇总
-            summary = self._aggregate_summary(params, dine_in, takeout, items)
-            self.execute("""
-                INSERT INTO daily_summary (store_id, summary_date, total_revenue, total_orders,
-                    total_customers, avg_price, dine_in_revenue, takeout_revenue,
-                    peak_hour_revenue, dish_total_count, is_holiday, weather, temperature, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-            """, (
-                summary["store_id"], summary["summary_date"], summary["total_revenue"],
-                summary["total_orders"], summary["total_customers"], summary["avg_price"],
-                summary["dine_in_revenue"], summary["takeout_revenue"],
-                summary["peak_hour_revenue"], summary["dish_total_count"],
-                summary["is_holiday"], summary["weather"], summary["temperature"],
-            ))
+            # 批量插入当天汇总
+            if all_summaries:
+                summary_rows = []
+                for s in all_summaries:
+                    summary_rows.append((
+                        s["store_id"], s["summary_date"], s["total_revenue"],
+                        s["total_orders"], s["total_customers"], s["avg_price"],
+                        s["dine_in_revenue"], s["takeout_revenue"],
+                        s["peak_hour_revenue"], s["dish_total_count"],
+                        s["is_holiday"],
+                    ))
+                batch_size = self.config["BATCH_SUMMARY"]
+                summary_sql = """INSERT INTO daily_summary
+                    (store_id, summary_date, total_revenue, total_orders,
+                     total_customers, avg_price, dine_in_revenue, takeout_revenue,
+                     peak_hour_revenue, dish_total_count, is_holiday, created_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())"""
+                for i in range(0, len(summary_rows), batch_size):
+                    self.executemany(summary_sql, summary_rows[i:i + batch_size])
 
-            total_dine_in += len(dine_in)
-            total_takeout += len(takeout)
-            total_items += len(items)
+            grand_dine_in += len(all_dine_in)
+            grand_takeout += len(all_takeout)
+            grand_items += len(all_items)
+
+            # 月份切换时提交一次数据库
+            if curr_month != last_month:
+                self.commit()
+                last_month = curr_month
+
+            # 进度打印（每 30 天）
+            if (day_offset + 1) % 30 == 0:
+                pct = (day_offset + 1) / total_days * 100
+                print(f"    进度: {pct:.1f}% ({d.isoformat()}), "
+                      f"累计订单: {grand_dine_in + grand_takeout}")
 
         self.commit()
-        return total_dine_in, total_takeout, total_items
+        print(f"    完成! 共生成 {grand_dine_in + grand_takeout} 笔订单, {grand_items} 条明细")
+        return grand_dine_in, grand_takeout, grand_items
 
     # --------------------------------------------------
     # 评论
@@ -838,6 +955,7 @@ class DataGenerator:
         print(f"  数据库: {self.config['DB_HOST']}:{self.config['DB_PORT']}/{self.config['DB_NAME']}")
         print(f"  日期范围: {self.config['START_DATE']} ~ {self.config['END_DATE']}")
         print(f"  门店数量: {self.config['STORE_COUNT']}")
+        print(f"  菜品数量: {len(DISHES)}")
         print("=" * 60)
         t_start = time.time()
 
@@ -845,30 +963,16 @@ class DataGenerator:
         print("\n[1/5] 门店数据")
         store_data = self.generate_stores()
         store_ids = self.insert_stores(store_data)
-        # 记录每家门店的开业日期
         self.store_dates = {sid: sd["open_date"] for sid, sd in zip(store_ids, store_data)}
 
         # ── 2. 菜品 ──
         print("\n[2/5] 菜品数据")
         self.dish_ids = self.generate_and_insert_dishes()
 
-        # ── 3. 订单 + 营业数据（最耗时）──
-        print(f"\n[3/5] 订单数据（{len(store_ids)} 家门店，每家经营 1~2 年）")
-        grand_total_dine_in = 0
-        grand_total_takeout = 0
-        grand_total_items = 0
-        store_idx = 0
-        for sid in store_ids:
-            store_idx += 1
-            di, to, items = self.process_store(sid, self.store_dates[sid])
-            grand_total_dine_in += di
-            grand_total_takeout += to
-            grand_total_items += items
-            if store_idx % 50 == 0 or store_idx == len(store_ids):
-                pct = store_idx / len(store_ids) * 100
-                print(f"    门店进度: {pct:.0f}% ({store_idx}/{len(store_ids)}), "
-                      f"已生成订单: {grand_total_dine_in + grand_total_takeout}, "
-                      f"明细: {grand_total_items}")
+        # ── 3. 订单 + 营业数据（按天循环，每月提交）──
+        print(f"\n[3/5] 订单数据（按天生成 {self.total_days} 天，每月提交一次）")
+        grand_total_dine_in, grand_total_takeout, grand_total_items = \
+            self._process_orders_day_by_day(store_ids)
 
         # ── 4. 评论 ──
         print("\n[4/5] 风评评论数据")
