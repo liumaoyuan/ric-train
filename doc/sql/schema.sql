@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS `takeout_order` (
 -- ===========================================
 CREATE TABLE IF NOT EXISTS `order_item` (
     `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '明细ID',
-    `order_id`      BIGINT          NOT NULL                 COMMENT '订单ID（关联堂食或外卖订单）',
+    `order_no`      VARCHAR(50)     NOT NULL                 COMMENT '订单号（关联 dine_in_order 或 takeout_order）',
     `store_id`      INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
     `dish_id`       INT             NOT NULL                 COMMENT '菜品ID，关联 dish.id',
     `dish_name`     VARCHAR(100)    NOT NULL                 COMMENT '菜品名称',
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS `order_item` (
     `price`         DECIMAL(10,2)   NOT NULL                 COMMENT '单价',
     `amount`        DECIMAL(10,2)   NOT NULL                 COMMENT '小计金额',
     PRIMARY KEY (`id`),
-    KEY `idx_order` (`order_id`),
+    KEY `idx_order_no` (`order_no`),
     KEY `idx_store_dish` (`store_id`, `dish_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='订单菜品明细表';
 

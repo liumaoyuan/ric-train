@@ -393,8 +393,11 @@ class DataGenerator:
         # store_id -> open_date（每家门店随机开业时间）
         self.store_dates: dict[int, date] = {}
 
-        # 累计订单号计数器（全局唯一）
+        # 累计订单号计数器（全局唯一，用于生成阶段临时关联）
         self.order_no_counter = 1
+        # 正式订单号计数器（DI=堂食, TO=外卖，确保永不重复）
+        self.dine_no_counter = 1
+        self.takeout_no_counter = 1
 
         # (store_id, dish_id) -> price（确保同店同菜价格一致）
         self.store_dish_prices: dict[tuple[int, int], float] = {}
@@ -679,10 +682,10 @@ class DataGenerator:
     # --------------------------------------------------
     # 批量插入订单
     # --------------------------------------------------
-    def _insert_dine_in_orders_batch(self, orders: list[dict]) -> dict[str, int]:
-        """批量插入堂食订单，返回 {order_no -> id} 映射"""
+    def _insert_dine_in_orders_batch(self, orders: list[dict]):
+        """批量插入堂食订单"""
         if not orders:
-            return {}
+            return
         sql = """INSERT INTO dine_in_order (store_id, order_no, total_amount, payment_method,
                                             member_id, dish_count, order_time, created_at)
                  VALUES (%(store_id)s, %(order_no)s, %(total_amount)s, %(payment_method)s,
@@ -690,15 +693,11 @@ class DataGenerator:
         batch_size = self.config["BATCH_ORDERS"]
         for i in range(0, len(orders), batch_size):
             self.executemany(sql, orders[i:i + batch_size])
-        order_nos = [o["order_no"] for o in orders]
-        placeholders = ",".join(["%s"] * len(order_nos))
-        self.execute(f"SELECT order_no, id FROM dine_in_order WHERE order_no IN ({placeholders})", order_nos)
-        return {row[0]: row[1] for row in self.cursor.fetchall()}
 
-    def _insert_takeout_orders_batch(self, orders: list[dict]) -> dict[str, int]:
-        """批量插入外卖订单，返回 {order_no -> id} 映射"""
+    def _insert_takeout_orders_batch(self, orders: list[dict]):
+        """批量插入外卖订单"""
         if not orders:
-            return {}
+            return
         sql = """INSERT INTO takeout_order (store_id, order_no, total_amount, platform,
                                             dish_count, order_time, created_at)
                  VALUES (%(store_id)s, %(order_no)s, %(total_amount)s, %(platform)s,
@@ -706,30 +705,20 @@ class DataGenerator:
         batch_size = self.config["BATCH_ORDERS"]
         for i in range(0, len(orders), batch_size):
             self.executemany(sql, orders[i:i + batch_size])
-        order_nos = [o["order_no"] for o in orders]
-        placeholders = ",".join(["%s"] * len(order_nos))
-        self.execute(f"SELECT order_no, id FROM takeout_order WHERE order_no IN ({placeholders})", order_nos)
-        return {row[0]: row[1] for row in self.cursor.fetchall()}
 
-    def _insert_items_batch(self, items: list[dict], no_to_id: dict[str, int]):
+    def _insert_items_batch(self, items: list[dict]):
         """批量插入订单明细"""
         if not items:
             return
-        sql = """INSERT INTO order_item (order_id, store_id, dish_id, dish_name,
+        sql = """INSERT INTO order_item (order_no, store_id, dish_id, dish_name,
                                          quantity, price, amount)
                  VALUES (%s, %s, %s, %s, %s, %s, %s)"""
-        rows = []
-        for it in items:
-            oid = no_to_id.get(it["order_no"])
-            if oid:
-                rows.append((
-                    oid, it["store_id"], it["dish_id"], it["dish_name"],
-                    it["quantity"], it["price"], it["amount"],
-                ))
-        if rows:
-            batch_size = self.config["BATCH_ITEMS"]
-            for i in range(0, len(rows), batch_size):
-                self.executemany(sql, rows[i:i + batch_size])
+        rows = [(it["order_no"], it["store_id"], it["dish_id"], it["dish_name"],
+                 it["quantity"], it["price"], it["amount"])
+                for it in items]
+        batch_size = self.config["BATCH_ITEMS"]
+        for i in range(0, len(rows), batch_size):
+            self.executemany(sql, rows[i:i + batch_size])
 
     def _aggregate_summary(self, params: dict, dine_in: list[dict], takeout: list[dict], items: list[dict]) -> dict:
         """从堂食和外卖订单聚合出 daily_summary"""
@@ -812,21 +801,25 @@ class DataGenerator:
             all_dine_in.sort(key=lambda o: o["order_time"])
             all_takeout.sort(key=lambda o: o["order_time"])
 
-            # 按时间顺序重新分配订单号，确保 order_no 严格按时间递增
+            # 按时间顺序重新分配订单号（DI=堂食, TO=外卖，确保永不重复）
             old_to_new = {}
-            for order in all_dine_in + all_takeout:
-                new_no = f"ORD{d.strftime('%Y%m%d')}{self.order_no_counter:010d}"
-                self.order_no_counter += 1
+            for order in all_dine_in:
+                new_no = f"DI{d.strftime('%Y%m%d')}{self.dine_no_counter:010d}"
+                self.dine_no_counter += 1
+                old_to_new[order["order_no"]] = new_no
+                order["order_no"] = new_no
+            for order in all_takeout:
+                new_no = f"TO{d.strftime('%Y%m%d')}{self.takeout_no_counter:010d}"
+                self.takeout_no_counter += 1
                 old_to_new[order["order_no"]] = new_no
                 order["order_no"] = new_no
             for item in all_items:
                 item["order_no"] = old_to_new[item["order_no"]]
 
             # 批量插入当天订单
-            no_to_id = {}
-            no_to_id.update(self._insert_dine_in_orders_batch(all_dine_in))
-            no_to_id.update(self._insert_takeout_orders_batch(all_takeout))
-            self._insert_items_batch(all_items, no_to_id)
+            self._insert_dine_in_orders_batch(all_dine_in)
+            self._insert_takeout_orders_batch(all_takeout)
+            self._insert_items_batch(all_items)
 
             # 批量插入当天汇总
             if all_summaries:
