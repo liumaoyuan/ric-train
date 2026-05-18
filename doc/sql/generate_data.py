@@ -33,6 +33,8 @@ import random
 import time
 from datetime import datetime, date, timedelta
 
+from dotenv import load_dotenv
+
 # ============================================================
 # 第三方依赖: pip install pymysql
 # ============================================================
@@ -46,6 +48,7 @@ except ImportError:
 # ============================================================
 # 配置
 # ============================================================
+load_dotenv()
 CONFIG = {
     "DB_HOST": os.getenv("DB_HOST"),
     "DB_PORT": int(os.getenv("DB_PORT")),
