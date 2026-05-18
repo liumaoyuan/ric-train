@@ -428,9 +428,11 @@ class DataGenerator:
             self.conn.close()
 
     def execute(self, sql: str, params: tuple | list | None = None):
+        self.conn.ping(reconnect=True)
         self.cursor.execute(sql, params or ())
 
     def executemany(self, sql: str, params_list: list[tuple]):
+        self.conn.ping(reconnect=True)
         self.cursor.executemany(sql, params_list)
 
     def commit(self):
