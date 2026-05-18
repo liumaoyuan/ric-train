@@ -302,19 +302,19 @@ SEASON_MULTIPLIERS = {1: 0.95, 2: 0.90, 3: 0.95, 4: 1.05, 5: 1.08, 6: 1.12,
 # 订单时间分布权重（每半小时时段，8:00-21:00）
 # 主要集中在午餐（11:00-13:00）和晚餐（17:00-19:00）高峰
 ORDER_TIME_DIST = [
-    (8, 0, 0.02), (8, 30, 0.03),       # 早餐/早间
-    (9, 0, 0.02), (9, 30, 0.02),
-    (10, 0, 0.02), (10, 30, 0.03),
-    (11, 0, 0.08), (11, 30, 0.12),      # 午餐高峰
-    (12, 0, 0.12), (12, 30, 0.10),
-    (13, 0, 0.05), (13, 30, 0.03),
-    (14, 0, 0.02), (14, 30, 0.02),
-    (15, 0, 0.02), (15, 30, 0.02),
-    (16, 0, 0.02), (16, 30, 0.03),
-    (17, 0, 0.05), (17, 30, 0.07),      # 晚餐高峰
-    (18, 0, 0.08), (18, 30, 0.07),
-    (19, 0, 0.05), (19, 30, 0.03),
-    (20, 0, 0.02), (20, 30, 0.01),
+    (8, 0, 1), (8, 30, 1),         # 早餐/早间
+    (9, 0, 2), (9, 30, 2),
+    (10, 0, 1), (10, 30, 2),
+    (11, 0, 8), (11, 30, 12),      # 午餐高峰
+    (12, 0, 12), (12, 30, 8),
+    (13, 0, 4), (13, 30, 1),
+    (14, 0, 2), (14, 30, 2),
+    (15, 0, 2), (15, 30, 2),
+    (16, 0, 2), (16, 30, 2),
+    (17, 0, 5), (17, 30, 7),       # 晚餐高峰
+    (18, 0, 8), (18, 30, 6),
+    (19, 0, 4), (19, 30, 2),
+    (20, 0, 1), (20, 30, 1),
 ]
 
 # ============================================================
@@ -392,6 +392,8 @@ class DataGenerator:
 
         # store_id -> open_date（每家门店随机开业时间）
         self.store_dates: dict[int, date] = {}
+        # store_id -> level（门店等级，与数据库一致）
+        self.store_levels: dict[int, int] = {}
 
         # 累计订单号计数器（全局唯一，用于生成阶段临时关联）
         self.order_no_counter = 1
@@ -540,7 +542,7 @@ class DataGenerator:
     # --------------------------------------------------
     def _calc_daily_params(self, store_id: int, d: date) -> dict | None:
         """计算单店单日营业参数，返回 None 表示休息"""
-        store_level = ((store_id - 1) % 3) + 1
+        store_level = self.store_levels.get(store_id, 2)
         store_seed = 0.8 + self.rand.random() * 0.4
         base_revenue = 1500 * store_seed
         level_mult = {1: 1.3, 2: 1.0, 3: 0.8}[store_level]
@@ -896,7 +898,7 @@ class DataGenerator:
                            "分量": ["份量足", "量大实惠", "份量少", "不够吃"],
                            "卫生": ["干净", "环境好", "卫生差"]}
                 tc = self.rand.choice(list(tag_map.keys()))
-                tags = ",".join(self.rand.sample(tag_map[tc], self.rand.randint(1, 3)))
+                tags = ",".join(self.rand.sample(tag_map[tc], self.rand.randint(1, min(3, len(tag_map[tc])))))
                 need_reply = False
                 reply = None
                 if is_pos == 1 and self.rand.random() < 0.7:
@@ -960,6 +962,7 @@ class DataGenerator:
         store_data = self.generate_stores()
         store_ids = self.insert_stores(store_data)
         self.store_dates = {sid: sd["open_date"] for sid, sd in zip(store_ids, store_data)}
+        self.store_levels = {sid: sd["level"] for sid, sd in zip(store_ids, store_data)}
 
         # ── 2. 菜品 ──
         print("\n[2/5] 菜品数据")
@@ -967,8 +970,7 @@ class DataGenerator:
 
         # ── 3. 订单 + 营业数据（按天循环，每月提交）──
         print(f"\n[3/5] 订单数据（按天生成 {self.total_days} 天，每月提交一次）")
-        grand_total_dine_in, grand_total_takeout, grand_total_items = \
-            self._process_orders_day_by_day(store_ids)
+        self._process_orders_day_by_day(store_ids)
 
         # ── 4. 评论 ──
         print("\n[4/5] 风评评论数据")
