@@ -52,7 +52,7 @@ CONFIG = {
     "DB_USER": os.getenv("DB_USER", "root"),
     "DB_PASSWORD": os.getenv("DB_PASSWORD", "liu12138"),
     "DB_NAME": os.getenv("DB_NAME", "catering_ai_system"),
-    "START_DATE": "2023-01-01想·",
+    "START_DATE": "2023-01-01",
     "END_DATE": "2026-05-17",
     "STORE_COUNT": 500,
     "BATCH_ORDERS": 5000,       # orders 批量插入
@@ -633,7 +633,7 @@ class DataGenerator:
             m_offset = self.rand.randint(0, 29)
             order_time = datetime(d.year, d.month, d.day, h, m + m_offset)
 
-            order_no = f"ORD{d.strftime('%Y%m%d')}{self.order_no_counter:08d}"
+            order_no = f"ORD{d.strftime('%Y%m%d')}{self.order_no_counter:010d}"
             self.order_no_counter += 1
 
             is_takeout = self.rand.random() < takeout_ratio
@@ -812,7 +812,7 @@ class DataGenerator:
             # 按时间顺序重新分配订单号，确保 order_no 严格按时间递增
             old_to_new = {}
             for order in all_dine_in + all_takeout:
-                new_no = f"ORD{d.strftime('%Y%m%d')}{self.order_no_counter:08d}"
+                new_no = f"ORD{d.strftime('%Y%m%d')}{self.order_no_counter:010d}"
                 self.order_no_counter += 1
                 old_to_new[order["order_no"]] = new_no
                 order["order_no"] = new_no

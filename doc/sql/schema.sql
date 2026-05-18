@@ -15,7 +15,7 @@ USE catering_ai_system;
 -- 1. 门店表
 -- ===========================================
 -- DROP TABLE IF EXISTS `store`;
-CREATE TABLE `store` (
+CREATE TABLE IF NOT EXISTS  `store` (
     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '门店ID',
     `name`          VARCHAR(100)    NOT NULL                 COMMENT '门店名称',
     `province`      VARCHAR(50)     NOT NULL                 COMMENT '所在省份',
@@ -37,7 +37,7 @@ CREATE TABLE `store` (
 -- 2. 菜品表
 -- ===========================================
 -- DROP TABLE IF EXISTS `dish`;
-CREATE TABLE `dish` (
+CREATE TABLE IF NOT EXISTS `dish` (
     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '菜品ID',
     `name`          VARCHAR(100)    NOT NULL                 COMMENT '菜品名称',
     `category`      VARCHAR(50)     NOT NULL                 COMMENT '分类: 热菜/凉菜/主食/汤品/饮品/配菜',
@@ -57,7 +57,7 @@ CREATE TABLE `dish` (
 -- 3. 会员表（暂不实现，保留 DDL 供后续启用）
 -- ===========================================
 -- DROP TABLE IF EXISTS `member`;
-CREATE TABLE `member` (
+CREATE TABLE IF NOT EXISTS `member` (
     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '会员ID',
     `store_id`      INT             NOT NULL                 COMMENT '所属门店ID，关联 store.id',
     `name`          VARCHAR(50)     NOT NULL                 COMMENT '会员姓名',
@@ -79,7 +79,7 @@ CREATE TABLE `member` (
 -- ===========================================
 -- DROP TABLE IF EXISTS `order_item`;
 -- DROP TABLE IF EXISTS `dine_in_order`;
-CREATE TABLE `dine_in_order` (
+CREATE TABLE IF NOT EXISTS `dine_in_order` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
     `store_id`          INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
     `order_no`          VARCHAR(50)     NOT NULL                 COMMENT '订单号',
@@ -99,7 +99,7 @@ CREATE TABLE `dine_in_order` (
 -- 5. 外卖订单表
 -- ===========================================
 -- DROP TABLE IF EXISTS `takeout_order`;
-CREATE TABLE `takeout_order` (
+CREATE TABLE IF NOT EXISTS `takeout_order` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
     `store_id`          INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
     `order_no`          VARCHAR(50)     NOT NULL                 COMMENT '订单号',
@@ -117,7 +117,7 @@ CREATE TABLE `takeout_order` (
 -- ===========================================
 -- 6. 订单菜品明细表
 -- ===========================================
-CREATE TABLE `order_item` (
+CREATE TABLE IF NOT EXISTS `order_item` (
     `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '明细ID',
     `order_id`      BIGINT          NOT NULL                 COMMENT '订单ID（关联堂食或外卖订单）',
     `store_id`      INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
@@ -136,7 +136,7 @@ CREATE TABLE `order_item` (
 -- 7. 营业汇总表（每日每店一条记录）
 -- ===========================================
 -- DROP TABLE IF EXISTS `daily_summary`;
-CREATE TABLE `daily_summary` (
+CREATE TABLE IF NOT EXISTS `daily_summary` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '记录ID',
     `store_id`          INT             NOT NULL                 COMMENT '门店ID',
     `summary_date`      DATE            NOT NULL                 COMMENT '日期',
@@ -160,7 +160,7 @@ CREATE TABLE `daily_summary` (
 -- 8. 评论表（风评分析）
 -- ===========================================
 -- DROP TABLE IF EXISTS `review`;
-CREATE TABLE `review` (
+CREATE TABLE IF NOT EXISTS `review` (
     `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '评论ID',
     `store_id`      INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
     `platform`      VARCHAR(20)     NOT NULL                 COMMENT '平台: 美团/饿了么/大众点评',
@@ -183,7 +183,7 @@ CREATE TABLE `review` (
 -- 9. 库存表（智能备菜）（暂不实现）
 -- ===========================================
 -- -- DROP TABLE IF EXISTS `inventory`;
--- CREATE TABLE `inventory` (
+-- CREATE TABLE IF NOT EXISTS `inventory` (
 --     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '库存ID',
 --     `store_id`      INT             NOT NULL                 COMMENT '门店ID',
 --     `dish_id`       INT             NOT NULL                 COMMENT '菜品ID',
@@ -201,7 +201,7 @@ CREATE TABLE `review` (
 -- 10. 采购单表（智能备菜）（暂不实现）
 -- ===========================================
 -- -- DROP TABLE IF EXISTS `purchase_order`;
--- CREATE TABLE `purchase_order` (
+-- CREATE TABLE IF NOT EXISTS `purchase_order` (
 --     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '采购单ID',
 --     `store_id`      INT             NOT NULL                 COMMENT '门店ID',
 --     `order_no`      VARCHAR(50)     NOT NULL                 COMMENT '采购单号',
@@ -221,7 +221,7 @@ CREATE TABLE `review` (
 -- 11. 采购明细表（暂不实现）
 -- ===========================================
 -- -- DROP TABLE IF EXISTS `purchase_order_item`;
--- CREATE TABLE `purchase_order_item` (
+-- CREATE TABLE IF NOT EXISTS `purchase_order_item` (
 --     `id`                INT             NOT NULL AUTO_INCREMENT  COMMENT '明细ID',
 --     `purchase_order_id` INT             NOT NULL                 COMMENT '采购单ID',
 --     `dish_id`           INT             NOT NULL                 COMMENT '菜品ID',
@@ -237,7 +237,7 @@ CREATE TABLE `review` (
 -- 12. 用户表（RBAC权限系统）
 -- ===========================================
 -- DROP TABLE IF EXISTS `user`;
-CREATE TABLE `user` (
+CREATE TABLE IF NOT EXISTS `user` (
     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '用户ID',
     `username`      VARCHAR(50)     NOT NULL                 COMMENT '用户名',
     `password_hash` VARCHAR(255)    NOT NULL                 COMMENT '密码哈希',
