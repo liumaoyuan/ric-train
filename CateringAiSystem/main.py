@@ -14,6 +14,7 @@ from CateringAiSystem.Api.authApi import router as auth_router
 from CateringAiSystem.Api.sysUserApi import router as user_router
 from CateringAiSystem.Api.sysRoleApi import router as role_router
 from CateringAiSystem.Api.sysMenuApi import router as menu_router
+from CateringAiSystem.Api.dataApi import router as data_router
 
 app = FastAPI(
     title="连锁餐饮 AI 系统",
@@ -29,11 +30,12 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(role_router)
 app.include_router(menu_router)
+app.include_router(data_router)
 
 
 @app.get("/")
 def root():
-    return {"code": 200, "msg": "连锁餐饮 AI 系统 — Phase 1 (RBAC)", "data": None}
+    return {"code": 200, "msg": "连锁餐饮 AI 系统 — Phase 2 (原始数据查询)", "data": None}
 
 
 @app.get("/health")

@@ -4,6 +4,11 @@ const componentMap = {
   'views/sys/user/UserList.vue': () => import('../views/sys/user/UserList.vue'),
   'views/sys/role/RoleList.vue': () => import('../views/sys/role/RoleList.vue'),
   'views/sys/menu/MenuList.vue': () => import('../views/sys/menu/MenuList.vue'),
+  'views/data/OrderList.vue': () => import('../views/data/OrderList.vue'),
+  'views/data/SummaryList.vue': () => import('../views/data/SummaryList.vue'),
+  'views/data/DishList.vue': () => import('../views/data/DishList.vue'),
+  'views/data/StoreList.vue': () => import('../views/data/StoreList.vue'),
+  'views/data/ReviewList.vue': () => import('../views/data/ReviewList.vue'),
 }
 
 const TYPE_MENU = 1
