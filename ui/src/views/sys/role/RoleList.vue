@@ -134,8 +134,8 @@ async function fetchData() {
     if (params.status === '' || params.status === null) delete params.status
     if (!params.role_name) delete params.role_name
     const res = await getRoleList(params)
-    tableData.value = res.items || res.records || []
-    total.value = res.total || 0
+    tableData.value = res.data?.data || []
+    total.value = res.data?.total || 0
   } finally {
     loading.value = false
   }
@@ -205,8 +205,8 @@ const menuDialog = reactive({ visible: false, saving: false, roleId: null, treeD
 async function openAssignMenu(row) {
   menuDialog.roleId = row.id
   const [treeRes, menusRes] = await Promise.all([getMenuTree(), getRoleMenus(row.id)])
-  menuDialog.treeData = Array.isArray(treeRes) ? treeRes : (treeRes.children || [])
-  menuDialog.checkedMenus = Array.isArray(menusRes) ? menusRes : (menusRes.menu_ids || [])
+  menuDialog.treeData = treeRes.data || []
+  menuDialog.checkedMenus = menusRes.data?.menu_ids || []
   menuDialog.visible = true
   // 下一帧设置勾选
   setTimeout(() => { menuTreeRef.value?.setCheckedKeys(menuDialog.checkedMenus) }, 100)

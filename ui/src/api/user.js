@@ -25,7 +25,7 @@ export function toggleUserStatus(userId) {
 }
 
 export function resetUserPassword(userId, data) {
-  return request.put(`/sys/user/${userId}/password`, data)
+  return request.put(`/sys/user/${userId}/password`, { password: data.new_password })
 }
 
 export function getUserRoles(userId) {

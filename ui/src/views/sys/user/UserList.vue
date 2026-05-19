@@ -181,8 +181,8 @@ async function fetchData() {
     if (params.status === '' || params.status === null) delete params.status
     if (!params.username) delete params.username
     const res = await getUserList(params)
-    tableData.value = res.items || res.records || []
-    total.value = res.total || 0
+    tableData.value = res.data?.data || []
+    total.value = res.data?.total || 0
   } finally {
     loading.value = false
   }
@@ -274,8 +274,8 @@ async function openAssignRole(row) {
   roleDialog.selected = []
   try {
     const [rolesRes, userRolesRes] = await Promise.all([getAllRoles(), getUserRoles(row.id)])
-    roleDialog.allRoles = Array.isArray(rolesRes) ? rolesRes : (rolesRes.items || rolesRes.records || [])
-    roleDialog.selected = Array.isArray(userRolesRes) ? userRolesRes.map(r => r.role_id || r.id) : (userRolesRes.role_ids || [])
+    roleDialog.allRoles = rolesRes.data || []
+    roleDialog.selected = userRolesRes.data?.role_ids || []
   } catch { /* ignore */ }
   roleDialog.visible = true
 }

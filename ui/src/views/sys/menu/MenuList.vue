@@ -133,7 +133,7 @@ async function fetchTree() {
   loading.value = true
   try {
     const res = await getMenuTree()
-    const tree = Array.isArray(res) ? res : (res.children || [])
+    const tree = res.data || []
     tableData.value = tree
     // 深拷贝一份供上级菜单选择器使用
     parentTree.value = JSON.parse(JSON.stringify(tree))
@@ -168,7 +168,8 @@ function openCreate(parentId) {
 async function openEdit(row) {
   dialog.isEdit = true; dialog.id = row.id
   try {
-    const detail = row.id ? await getMenuDetail(row.id) : row
+    const raw = row.id ? await getMenuDetail(row.id) : row
+    const detail = raw.data || raw
     form.parent_id = detail.parent_id ?? 0
     form.menu_name = detail.menu_name
     form.menu_type = detail.menu_type
