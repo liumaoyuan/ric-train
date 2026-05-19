@@ -16,6 +16,7 @@ WHITE_LIST = [
     r"^/redoc$",
     r"^/$",
     r"^/health$",
+    r"^/white/.*$",
 ]
 
 
