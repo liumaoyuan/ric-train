@@ -16,11 +16,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, resolveComponent } from 'vue'
 import { useAuthStore } from '../store/auth'
-import {
-  HomeFilled, Setting, Menu as MenuIcon, User, Avatar,
-} from '@element-plus/icons-vue'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -28,13 +25,9 @@ const props = defineProps({
 
 const authStore = useAuthStore()
 
-const iconMap = {
-  HomeFilled, Setting, Menu: MenuIcon, User, Avatar,
-}
-
 const iconComp = computed(() => {
   if (!props.item.icon) return null
-  return iconMap[props.item.icon] || null
+  return resolveComponent(props.item.icon) || null
 })
 
 const resolvedPath = computed(() => {

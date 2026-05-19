@@ -13,7 +13,6 @@
         stripe
         border
         row-key="id"
-        default-expand-all
         :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
       >
         <el-table-column prop="menu_name" label="菜单名称" min-width="200">
@@ -81,7 +80,7 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="form.menu_type <= 1" label="图标" prop="icon">
-          <el-input v-model="form.icon" placeholder="如 Menu, User, Setting" />
+          <IconSelector v-model="form.icon" />
         </el-form-item>
         <el-form-item v-if="form.menu_type <= 1" label="路由路径" prop="path">
           <el-input v-model="form.path" placeholder="如 /sys/user" />
@@ -121,6 +120,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../../../store/auth'
 import { getMenuTree, getMenuDetail, createMenu, updateMenu, deleteMenu } from '../../../api/menu'
+import IconSelector from '../../../components/IconSelector.vue'
 
 const authStore = useAuthStore()
 function hasPerm(code) { return authStore.hasPermission(code) }
