@@ -61,15 +61,15 @@ class SysRole(DefaultDbModel):
                 where_clauses.append("`status` = %s")
                 params.append(status)
 
-            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+            where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-            count_sql = f"SELECT COUNT(*) AS total FROM {table_name} WHERE {where_sql}"
+            count_sql = f"SELECT COUNT(*) AS total FROM {table_name} {where_sql}"
             count_result = db.execute(count_sql, tuple(params))
             total = count_result[0]["total"] if count_result else 0
 
             offset = (page - 1) * page_size
             list_sql = f"""SELECT * FROM {table_name}
-WHERE {where_sql}
+{where_sql}
 ORDER BY `sort_order` ASC, `id` ASC
 LIMIT {offset}, {page_size}"""
             results = db.execute(list_sql, tuple(params))

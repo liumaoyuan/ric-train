@@ -7,7 +7,7 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('access_token') || '')
   const refreshToken = ref(localStorage.getItem('refresh_token') || '')
   const userInfo = ref(JSON.parse(localStorage.getItem('user_info') || 'null'))
-  const menuTree = ref(JSON.parse(localStorage.getItem('menu_tree') || '[]'))
+  const menuTree = ref([])
 
   const isLoggedIn = computed(() => !!token.value)
   const permissions = computed(() => userInfo.value?.permissions || [])
@@ -38,7 +38,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const res = await getCurrentUserMenus()
       menuTree.value = res.data || []
-      localStorage.setItem('menu_tree', JSON.stringify(menuTree.value))
     } catch {
       menuTree.value = []
     }
@@ -52,7 +51,6 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('user_info')
-    localStorage.removeItem('menu_tree')
   }
 
   function hasPermission(code) {

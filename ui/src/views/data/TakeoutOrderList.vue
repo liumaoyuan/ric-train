@@ -37,7 +37,7 @@
         <el-table-column prop="total_amount" label="金额(元)" width="110" align="right">
           <template #default="{ row }">{{ row.total_amount.toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column prop="payment_method_or_platform" label="外卖平台" width="130" />
+        <el-table-column prop="platform" label="外卖平台" width="130" />
         <el-table-column prop="order_time" label="下单时间" width="170" />
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
@@ -67,7 +67,7 @@
           <el-descriptions-item label="订单号" :span="2">{{ detail.order_no }}</el-descriptions-item>
           <el-descriptions-item label="门店">{{ detail.store_name }}</el-descriptions-item>
           <el-descriptions-item label="订单类型">外卖</el-descriptions-item>
-          <el-descriptions-item label="外卖平台">{{ detail.payment_method_or_platform }}</el-descriptions-item>
+          <el-descriptions-item label="外卖平台">{{ detail.platform }}</el-descriptions-item>
           <el-descriptions-item label="金额(元)">{{ detail.total_amount.toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="下单时间">{{ detail.order_time }}</el-descriptions-item>
           <el-descriptions-item label="会员ID">{{ detail.member_id || '—' }}</el-descriptions-item>
@@ -92,12 +92,12 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useAuthStore } from '../../store/auth'
-import { getOrderList, getOrderDetail, getStoreOptions } from '../../api/data'
+import { getTakeoutOrderList, getTakeoutOrderDetail, getStoreOptions } from '../../api/data'
 
 const authStore = useAuthStore()
 function hasPerm(code) { return authStore.hasPermission(code) }
 
-const query = reactive({ page: 1, page_size: 10, store_id: '', order_type: 'takeout', date_from: '', date_to: '' })
+const query = reactive({ page: 1, page_size: 10, store_id: '', date_from: '', date_to: '' })
 const dateRange = ref(null)
 const tableData = ref([])
 const total = ref(0)
@@ -122,7 +122,7 @@ async function fetchData() {
   try {
     const params = { ...query }
     Object.keys(params).forEach(k => { if (params[k] === '' || params[k] === null) delete params[k] })
-    const res = await getOrderList(params)
+    const res = await getTakeoutOrderList(params)
     tableData.value = res.data?.data || []
     total.value = res.data?.total || 0
   } finally {
@@ -144,7 +144,7 @@ async function openDetail(row) {
   detail.value = null
   detailVisible.value = true
   try {
-    const res = await getOrderDetail(row.order_no)
+    const res = await getTakeoutOrderDetail(row.order_no)
     detail.value = res.data
   } catch { /* ignore */ }
 }

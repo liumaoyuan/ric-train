@@ -29,6 +29,24 @@ export function getOrderDetail(orderNo) {
   return request.get(`/data/orders/${encodeURIComponent(orderNo)}`)
 }
 
+// ==================== 堂食订单 ====================
+export function getDineInOrderList(params) {
+  return request.get('/data/dine-in-orders', { params })
+}
+
+export function getDineInOrderDetail(orderNo) {
+  return request.get(`/data/dine-in-orders/${encodeURIComponent(orderNo)}`)
+}
+
+// ==================== 外卖订单 ====================
+export function getTakeoutOrderList(params) {
+  return request.get('/data/takeout-orders', { params })
+}
+
+export function getTakeoutOrderDetail(orderNo) {
+  return request.get(`/data/takeout-orders/${encodeURIComponent(orderNo)}`)
+}
+
 // ==================== 营业汇总 ====================
 export function getDailySummaryList(params) {
   return request.get('/data/daily-summary', { params })

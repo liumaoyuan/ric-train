@@ -67,9 +67,9 @@ class SysUser(DefaultDbModel):
                 where_clauses.append("`status` = %s")
                 params.append(status)
 
-            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+            where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-            count_sql = f"SELECT COUNT(*) AS total FROM {table_name} WHERE {where_sql}"
+            count_sql = f"SELECT COUNT(*) AS total FROM {table_name} {where_sql}"
             count_result = db.execute(count_sql, tuple(params))
             total = count_result[0]["total"] if count_result else 0
 
@@ -77,7 +77,7 @@ class SysUser(DefaultDbModel):
             list_sql = f"""SELECT `id`, `username`, `display_name`, `phone`, `email`,
 `avatar`, `status`, `remark`, `created_at`, `updated_at`
 FROM {table_name}
-WHERE {where_sql}
+{where_sql}
 ORDER BY `created_at` DESC
 LIMIT {offset}, {page_size}"""
             results = db.execute(list_sql, tuple(params))

@@ -43,6 +43,68 @@ def get_order_detail(order_no: str, request: Request):
     return {"code": 200, "msg": "success", "data": result}
 
 
+@router.get("/dine-in-orders")
+@require_permission("data:dine-in:list")
+def list_dine_in_orders(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    store_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """堂食订单列表（分页）"""
+    user = get_current_user(request)
+    store_ids = DataService.get_user_store_ids(user)
+    data = DataService.get_dine_in_orders(
+        page=page, page_size=page_size,
+        store_id=store_id, date_from=date_from, date_to=date_to,
+        store_ids=store_ids,
+    )
+    return {"code": 200, "msg": "success", "data": data}
+
+
+@router.get("/dine-in-orders/{order_no}")
+@require_permission("data:dine-in:detail")
+def get_dine_in_order_detail(order_no: str, request: Request):
+    """堂食订单详情（含菜品明细）"""
+    result = DataService.get_dine_in_order_detail(order_no)
+    if result is None:
+        return {"code": 404, "msg": "订单不存在", "data": None}
+    return {"code": 200, "msg": "success", "data": result}
+
+
+@router.get("/takeout-orders")
+@require_permission("data:takeout:list")
+def list_takeout_orders(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    store_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """外卖订单列表（分页）"""
+    user = get_current_user(request)
+    store_ids = DataService.get_user_store_ids(user)
+    data = DataService.get_takeout_orders(
+        page=page, page_size=page_size,
+        store_id=store_id, date_from=date_from, date_to=date_to,
+        store_ids=store_ids,
+    )
+    return {"code": 200, "msg": "success", "data": data}
+
+
+@router.get("/takeout-orders/{order_no}")
+@require_permission("data:takeout:detail")
+def get_takeout_order_detail(order_no: str, request: Request):
+    """外卖订单详情（含菜品明细）"""
+    result = DataService.get_takeout_order_detail(order_no)
+    if result is None:
+        return {"code": 404, "msg": "订单不存在", "data": None}
+    return {"code": 200, "msg": "success", "data": result}
+
+
 @router.get("/daily-summary")
 @require_permission("data:summary:list")
 def list_daily_summary(
