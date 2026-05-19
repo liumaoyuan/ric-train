@@ -51,6 +51,9 @@ const router = createRouter({
 // 记录已添加的动态路由 name，用于重复添加时清理
 let dynamicRouteNames = []
 
+// 防止未匹配路由时无限重试
+let _menuFetchRetried = false
+
 /**
  * 根据 store 中的菜单树重建动态路由
  * 在登录完成或页面刷新时调用
@@ -120,10 +123,17 @@ router.beforeEach(async (to, from, next) => {
 
   // 未匹配任何路由 → 尝试从后端重新获取菜单后重试，仍不匹配则 404
   if (to.matched.length === 0) {
+    if (_menuFetchRetried) {
+      _menuFetchRetried = false
+      next({ name: 'NotFound' })
+      return
+    }
+    _menuFetchRetried = true
     try {
       await authStore.fetchMenus()
       rebuildDynamicRoutes()
     } catch {
+      _menuFetchRetried = false
       next({ name: 'NotFound' })
       return
     }
