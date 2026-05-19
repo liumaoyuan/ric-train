@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from CateringAiSystem.Models.sysModels import SysRole, SysRoleMenu, SysUserRole
+from CateringAiSystem.Models import SysRole, SysRoleMenu, SysUserRole
 
 logger = logging.getLogger(__name__)
 

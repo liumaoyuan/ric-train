@@ -1,6 +1,6 @@
 import logging
 
-from CateringAiSystem.Models.sysModels import SysUser, SysRole, SysUserRole, SysRoleMenu, SysMenu
+from CateringAiSystem.Models import SysUser, SysRole, SysUserRole, SysRoleMenu, SysMenu
 from CateringAiSystem.Service.sysMenuService import SysMenuService
 from CateringAiSystem.Utils.authUtils import (
     verify_password,

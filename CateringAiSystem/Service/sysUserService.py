@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from CateringAiSystem.Models.sysModels import SysUser, SysUserRole
+from CateringAiSystem.Models import SysUser, SysUserRole
 from CateringAiSystem.Utils.authUtils import hash_password
 
 logger = logging.getLogger(__name__)

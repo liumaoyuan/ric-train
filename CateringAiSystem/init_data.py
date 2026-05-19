@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from CateringAiSystem.Models.sysModels import SysUser, SysRole, SysUserRole
+from CateringAiSystem.Models import SysUser, SysRole, SysUserRole
 from CateringAiSystem.Utils.authUtils import hash_password
 
 
