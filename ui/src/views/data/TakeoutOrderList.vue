@@ -38,7 +38,9 @@
           <template #default="{ row }">{{ row.total_amount.toFixed(2) }}</template>
         </el-table-column>
         <el-table-column prop="platform" label="外卖平台" width="130" />
-        <el-table-column prop="order_time" label="下单时间" width="170" />
+        <el-table-column prop="order_time" label="下单时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.order_time) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <el-button v-if="hasPerm('data:order:detail')" text size="small" type="primary" @click="openDetail(row)">
@@ -69,7 +71,7 @@
           <el-descriptions-item label="订单类型">外卖</el-descriptions-item>
           <el-descriptions-item label="外卖平台">{{ detail.platform }}</el-descriptions-item>
           <el-descriptions-item label="金额(元)">{{ detail.total_amount.toFixed(2) }}</el-descriptions-item>
-          <el-descriptions-item label="下单时间">{{ detail.order_time }}</el-descriptions-item>
+          <el-descriptions-item label="下单时间">{{ formatDateTime(detail.order_time) }}</el-descriptions-item>
           <el-descriptions-item label="会员ID">{{ detail.member_id || '—' }}</el-descriptions-item>
         </el-descriptions>
 
@@ -96,6 +98,13 @@ import { getTakeoutOrderList, getTakeoutOrderDetail, getStoreOptions } from '../
 
 const authStore = useAuthStore()
 function hasPerm(code) { return authStore.hasPermission(code) }
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
 
 const query = reactive({ page: 1, page_size: 10, store_id: '', date_from: '', date_to: '' })
 const dateRange = ref(null)

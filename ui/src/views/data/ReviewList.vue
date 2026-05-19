@@ -67,7 +67,9 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="review_date" label="评论日期" width="110" />
+        <el-table-column prop="review_date" label="评论日期" width="110">
+          <template #default="{ row }">{{ formatDate(row.review_date) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <el-button v-if="hasPerm('data:review:detail')" text size="small" type="primary" @click="openDetail(row)">
@@ -107,8 +109,8 @@
               {{ detail.is_positive === 1 ? '正面' : detail.is_positive === -1 ? '负面' : '中性' }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="评论日期">{{ detail.review_date }}</el-descriptions-item>
-          <el-descriptions-item label="评论时间">{{ detail.review_time }}</el-descriptions-item>
+          <el-descriptions-item label="评论日期">{{ formatDate(detail.review_date) }}</el-descriptions-item>
+          <el-descriptions-item label="评论时间">{{ formatTime(detail.review_time) }}</el-descriptions-item>
           <el-descriptions-item label="标签" :span="2">{{ detail.tags || '—' }}</el-descriptions-item>
           <el-descriptions-item label="评论内容" :span="2">
             <div style="white-space: pre-wrap; background: var(--el-fill-color-light); padding: 8px; border-radius: 4px;">{{ detail.content }}</div>
@@ -122,7 +124,7 @@
           <el-descriptions-item v-if="detail.is_replied === 1 && detail.reply_content" label="回复内容" :span="2">
             <div style="white-space: pre-wrap; background: var(--el-fill-color-light); padding: 8px; border-radius: 4px;">{{ detail.reply_content }}</div>
           </el-descriptions-item>
-          <el-descriptions-item label="创建时间" :span="2">{{ detail.created_at }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间" :span="2">{{ formatDateTime(detail.created_at) }}</el-descriptions-item>
         </el-descriptions>
       </template>
     </el-dialog>
@@ -136,6 +138,27 @@ import { getReviewList, getReviewDetail, getStoreOptions } from '../../api/data'
 
 const authStore = useAuthStore()
 function hasPerm(code) { return authStore.hasPermission(code) }
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+function formatTime(timeStr) {
+  if (!timeStr) return '—'
+  const d = new Date(timeStr)
+  if (isNaN(d.getTime())) return timeStr
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
 
 const query = reactive({ page: 1, page_size: 10, store_id: '', platform: '', rating: '', is_positive: '', date_from: '', date_to: '' })
 const dateRange = ref(null)
