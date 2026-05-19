@@ -14,10 +14,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(credentials) {
     const res = await loginApi(credentials)
-    token.value = res.access_token
-    refreshToken.value = res.refresh_token
-    localStorage.setItem('access_token', res.access_token)
-    localStorage.setItem('refresh_token', res.refresh_token)
+    token.value = res.data.access_token
+    refreshToken.value = res.data.refresh_token
+    localStorage.setItem('access_token', res.data.access_token)
+    localStorage.setItem('refresh_token', res.data.refresh_token)
     // 登录成功后获取用户信息
     await fetchUserInfo()
   }
@@ -25,8 +25,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchUserInfo() {
     try {
       const res = await getUserInfoApi()
-      userInfo.value = res
-      localStorage.setItem('user_info', JSON.stringify(res))
+      userInfo.value = res.data
+      localStorage.setItem('user_info', JSON.stringify(res.data))
     } catch {
       // ignore
     }

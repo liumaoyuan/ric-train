@@ -1,5 +1,6 @@
 import logging
 from functools import wraps
+from inspect import iscoroutinefunction
 from typing import List
 
 from fastapi import Request, HTTPException
@@ -56,12 +57,16 @@ def require_permission(permission_codes: str | List[str]):
 
             # 管理员权限（admin）可以访问所有接口
             if "admin" in user.get("roles", []):
-                return await func(*args, **kwargs)
+                if iscoroutinefunction(func):
+                    return await func(*args, **kwargs)
+                return func(*args, **kwargs)
 
             # 检查是否拥有任一所需权限
             for code in codes:
                 if code in user_permissions:
-                    return await func(*args, **kwargs)
+                    if iscoroutinefunction(func):
+                        return await func(*args, **kwargs)
+                    return func(*args, **kwargs)
 
             raise HTTPException(status_code=403, detail=f"无权限访问，需要权限: {', '.join(codes)}")
 
