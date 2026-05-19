@@ -14,7 +14,7 @@ USE catering_ai_system;
 -- ===========================================
 -- 1. 门店表
 -- ===========================================
--- DROP TABLE IF EXISTS `store`;
+DROP TABLE IF EXISTS `store`;
 CREATE TABLE IF NOT EXISTS  `store` (
     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '门店ID',
     `name`          VARCHAR(100)    NOT NULL                 COMMENT '门店名称',
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS  `store` (
 -- ===========================================
 -- 2. 菜品表
 -- ===========================================
--- DROP TABLE IF EXISTS `dish`;
+DROP TABLE IF EXISTS `dish`;
 CREATE TABLE IF NOT EXISTS `dish` (
     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '菜品ID',
     `name`          VARCHAR(100)    NOT NULL                 COMMENT '菜品名称',
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS `dish` (
 -- ===========================================
 -- 3. 会员表（暂不实现，保留 DDL 供后续启用）
 -- ===========================================
--- DROP TABLE IF EXISTS `member`;
+DROP TABLE IF EXISTS `member`;
 CREATE TABLE IF NOT EXISTS `member` (
     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '会员ID',
     `store_id`      INT             NOT NULL                 COMMENT '所属门店ID，关联 store.id',
@@ -77,8 +77,8 @@ CREATE TABLE IF NOT EXISTS `member` (
 -- ===========================================
 -- 4. 堂食订单表
 -- ===========================================
--- DROP TABLE IF EXISTS `order_item`;
--- DROP TABLE IF EXISTS `dine_in_order`;
+DROP TABLE IF EXISTS `order_item`;
+DROP TABLE IF EXISTS `dine_in_order`;
 CREATE TABLE IF NOT EXISTS `dine_in_order` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
     `store_id`          INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS `dine_in_order` (
 -- ===========================================
 -- 5. 外卖订单表
 -- ===========================================
--- DROP TABLE IF EXISTS `takeout_order`;
+DROP TABLE IF EXISTS `takeout_order`;
 CREATE TABLE IF NOT EXISTS `takeout_order` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
     `store_id`          INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS `order_item` (
 -- ===========================================
 -- 7. 营业汇总表（每日每店一条记录）
 -- ===========================================
--- DROP TABLE IF EXISTS `daily_summary`;
+DROP TABLE IF EXISTS `daily_summary`;
 CREATE TABLE IF NOT EXISTS `daily_summary` (
     `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '记录ID',
     `store_id`          INT             NOT NULL                 COMMENT '门店ID',
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS `daily_summary` (
 -- ===========================================
 -- 8. 评论表（风评分析）
 -- ===========================================
--- DROP TABLE IF EXISTS `review`;
+DROP TABLE IF EXISTS `review`;
 CREATE TABLE IF NOT EXISTS `review` (
     `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '评论ID',
     `store_id`      INT             NOT NULL                 COMMENT '门店ID，关联 store.id',
@@ -236,21 +236,21 @@ CREATE TABLE IF NOT EXISTS `review` (
 -- ===========================================
 -- 12. 用户表（RBAC权限系统）
 -- ===========================================
--- DROP TABLE IF EXISTS `user`;
-CREATE TABLE IF NOT EXISTS `user` (
-    `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '用户ID',
-    `username`      VARCHAR(50)     NOT NULL                 COMMENT '用户名',
-    `password_hash` VARCHAR(255)    NOT NULL                 COMMENT '密码哈希',
-    `display_name`  VARCHAR(100)    DEFAULT NULL             COMMENT '显示名称',
-    `role`          VARCHAR(20)     NOT NULL                 COMMENT '角色: boss/employee/franchisee',
-    `store_id`      INT             DEFAULT NULL             COMMENT '关联门店(boss/employee可为null)，关联 store.id',
-    `phone`         VARCHAR(20)     DEFAULT NULL             COMMENT '手机号',
-    `email`         VARCHAR(100)    DEFAULT NULL             COMMENT '邮箱',
-    `status`        TINYINT         DEFAULT 1                COMMENT '状态: 1启用 0禁用',
-    `last_login`    DATETIME        DEFAULT NULL             COMMENT '最后登录时间',
-    `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_username` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
+DROP TABLE IF EXISTS `user`;
+# CREATE TABLE IF NOT EXISTS `user` (
+#     `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '用户ID',
+#     `username`      VARCHAR(50)     NOT NULL                 COMMENT '用户名',
+#     `password_hash` VARCHAR(255)    NOT NULL                 COMMENT '密码哈希',
+#     `display_name`  VARCHAR(100)    DEFAULT NULL             COMMENT '显示名称',
+#     `role`          VARCHAR(20)     NOT NULL                 COMMENT '角色: boss/employee/franchisee',
+#     `store_id`      INT             DEFAULT NULL             COMMENT '关联门店(boss/employee可为null)，关联 store.id',
+#     `phone`         VARCHAR(20)     DEFAULT NULL             COMMENT '手机号',
+#     `email`         VARCHAR(100)    DEFAULT NULL             COMMENT '邮箱',
+#     `status`        TINYINT         DEFAULT 1                COMMENT '状态: 1启用 0禁用',
+#     `last_login`    DATETIME        DEFAULT NULL             COMMENT '最后登录时间',
+#     `created_at`    DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+#     PRIMARY KEY (`id`),
+#     UNIQUE KEY `uk_username` (`username`)
+# ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 
