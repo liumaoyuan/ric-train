@@ -67,12 +67,11 @@ class DineInOrder(DefaultDbModel):
                 placeholders = ",".join(["%s"] * len(store_ids))
                 where_clauses.append(f"d.`store_id` IN ({placeholders})")
                 params.extend(store_ids)
-            if date_from:
-                where_clauses.append("d.`order_time` >= %s")
-                params.append(date_from)
-            if date_to:
-                where_clauses.append("d.`order_time` <= %s")
-                params.append(date_to)
+            if date_from and date_to:
+                date_from = date_from + " 00:00:00"
+                date_to = date_to + " 23:59:59"
+                where_clauses.append("d.`order_time` BETWEEN %s AND %s")
+                params.extend([date_from, date_to])
 
             where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
@@ -189,12 +188,11 @@ WHERE oi.`order_no` = %s"""
                 placeholders = ",".join(["%s"] * len(store_ids))
                 where_clauses.append(f"`store_id` IN ({placeholders})")
                 params.extend(store_ids)
-            if date_from:
-                where_clauses.append("`order_time` >= %s")
-                params.append(date_from)
-            if date_to:
-                where_clauses.append("`order_time` <= %s")
-                params.append(date_to)
+            if date_from and date_to:
+                date_from = date_from + " 00:00:00"
+                date_to = date_to + " 23:59:59"
+                where_clauses.append("d.`order_time` BETWEEN %s AND %s")
+                params.extend([date_from, date_to])
 
             where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
             select_base = "`id`, `store_id`, `order_no`, `total_amount`, `dish_count`, `order_time`, `created_at`"
