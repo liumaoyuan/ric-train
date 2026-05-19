@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/v1/data", tags=["原始数据查询"])
 
 
 @router.get("/orders")
-@require_permission("data:order:list")
+@require_permission(["data:order:list", "data:dine-in:list", "data:takeout:list"])
 def list_orders(
     request: Request,
     page: int = Query(1, ge=1),
@@ -34,7 +34,7 @@ def list_orders(
 
 
 @router.get("/orders/{order_no}")
-@require_permission("data:order:detail")
+@require_permission(["data:order:detail", "data:dine-in:detail", "data:takeout:detail"])
 def get_order_detail(order_no: str, request: Request):
     """订单详情（含菜品明细）"""
     result = DataService.get_order_detail(order_no)

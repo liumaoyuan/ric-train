@@ -33,18 +33,26 @@ INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `permission
 -- 三级 — 原始数据子菜单
 -- ===========================================
 INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `permission_code`, `path`, `component`, `icon`, `sort_order`, `visible`, `status`) VALUES
-(200, 20, '订单查询', 1, 'data:order:list',   '/data/orders',   'views/data/OrderList.vue',    'Tickets',     1, 1, 1),
-(201, 20, '营业汇总', 1, 'data:summary:list', '/data/summary',  'views/data/SummaryList.vue',  'DataBoard',   2, 1, 1),
-(202, 20, '菜品管理', 1, 'data:dish:list',    '/data/dishes',   'views/data/DishList.vue',     'Apple',       3, 1, 1),
-(203, 20, '门店管理', 1, 'data:store:list',   '/data/stores',   'views/data/StoreList.vue',    'OfficeBuilding',4,1, 1),
-(204, 20, '评论查看', 1, 'data:review:list',  '/data/reviews',  'views/data/ReviewList.vue',   'ChatLineSquare',5,1, 1);
+(205, 20, '堂食订单', 1, 'data:dine-in:list',   '/data/dine-in-orders',   'views/data/DineInOrderList.vue',    'CoffeeCup',   1, 1, 1),
+(206, 20, '外卖订单', 1, 'data:takeout:list', '/data/takeout-orders',  'views/data/TakeoutOrderList.vue',   'TakeoutBox',  2, 1, 1),
+(201, 20, '营业汇总', 1, 'data:summary:list', '/data/summary',  'views/data/SummaryList.vue',  'DataBoard',   3, 1, 1),
+(202, 20, '菜品管理', 1, 'data:dish:list',    '/data/dishes',   'views/data/DishList.vue',     'Apple',       4, 1, 1),
+(203, 20, '门店管理', 1, 'data:store:list',   '/data/stores',   'views/data/StoreList.vue',    'OfficeBuilding',5,1, 1),
+(204, 20, '评论查看', 1, 'data:review:list',  '/data/reviews',  'views/data/ReviewList.vue',   'ChatLineSquare',6,1, 1);
 
 -- ===========================================
--- 四级 — 订单查询按钮
+-- 四级 — 堂食订单按钮
 -- ===========================================
 INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `permission_code`, `sort_order`) VALUES
-(2000, 200, '查询列表', 2, 'data:order:list',   1),
-(2001, 200, '查看详情', 2, 'data:order:detail', 2);
+(2050, 205, '查询列表', 2, 'data:dine-in:list',   1),
+(2051, 205, '查看详情', 2, 'data:dine-in:detail', 2);
+
+-- ===========================================
+-- 四级 — 外卖订单按钮
+-- ===========================================
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `permission_code`, `sort_order`) VALUES
+(2060, 206, '查询列表', 2, 'data:takeout:list',   1),
+(2061, 206, '查看详情', 2, 'data:takeout:detail', 2);
 
 -- 营业汇总按钮
 INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `permission_code`, `sort_order`) VALUES
@@ -223,8 +231,10 @@ INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `permission
 # (2, 1), (2, 10),
 # -- 数据中心目录 + 原始数据目录
 # (2, 2), (2, 20),
-# -- 订单查询及其按钮
-# (2, 200), (2, 2000), (2, 2001),
+# -- 堂食订单及其按钮
+# (2, 205), (2, 2050), (2, 2051),
+# -- 外卖订单及其按钮
+# (2, 206), (2, 2060), (2, 2061),
 # -- 营业汇总及其按钮
 # (2, 201), (2, 2010),
 # -- 菜品管理及其按钮
@@ -262,8 +272,10 @@ INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `permission
 # (3, 1), (3, 10),
 # -- 数据中心目录 + 原始数据目录
 # (3, 2), (3, 20),
-# -- 订单查询及其按钮
-# (3, 200), (3, 2000), (3, 2001),
+# -- 堂食订单及其按钮
+# (3, 205), (3, 2050), (3, 2051),
+# -- 外卖订单及其按钮
+# (3, 206), (3, 2060), (3, 2061),
 # -- 营业汇总及其按钮
 # (3, 201), (3, 2010),
 # -- 菜品管理及其按钮

@@ -22,26 +22,15 @@ class DataService:
                    store_ids: Optional[list] = None) -> dict:
         """
         订单列表（合并堂食+外卖）
-        order_type: dine_in / takeout
+        使用 UNION ALL + SQL 级分页，避免全量加载到 Python
         """
         try:
             dine_table = DineInOrder.get_table_name_with_db()
             takeout_table = TakeoutOrder.get_table_name_with_db()
             store_table = Store.get_table_name_with_db()
-
-            # 构建 UNION 查询
-            dine_fields = (
-                "d.`id`, d.`store_id`, d.`order_no`, d.`total_amount`, "
-                "d.`payment_method` AS payment_method_or_platform, "
-                "d.`dish_count`, d.`order_time`, d.`created_at`, "
-                "'dine_in' AS order_type"
-            )
-            takeout_fields = (
-                "t.`id`, t.`store_id`, t.`order_no`, t.`total_amount`, "
-                "t.`platform` AS payment_method_or_platform, "
-                "t.`dish_count`, t.`order_time`, t.`created_at`, "
-                "'takeout' AS order_type"
-            )
+            db = DineInOrder.get_db_connection()
+            if db is None:
+                return {"total": 0, "page": page, "page_size": page_size, "data": []}
 
             where_clauses = []
             params = []
@@ -61,57 +50,65 @@ class DataService:
                 params.append(date_to)
 
             where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+            select_base = "`id`, `store_id`, `order_no`, `total_amount`, `dish_count`, `order_time`, `created_at`"
 
-            # 构建子查询
-            sub_queries = []
+            # 构建子查询，每个子查询对应一份 params
+            subqueries = []
+            query_params = []
 
             if order_type is None or order_type == "dine_in":
-                sub_queries.append(
-                    f"SELECT {dine_fields} FROM {dine_table} d WHERE {where_sql}"
+                subqueries.append(
+                    f"SELECT {select_base}, `payment_method` AS payment_method_or_platform, "
+                    f"'dine_in' AS order_type FROM {dine_table} WHERE {where_sql}"
                 )
+                query_params.extend(params)
+
             if order_type is None or order_type == "takeout":
-                sub_queries.append(
-                    f"SELECT {takeout_fields} FROM {takeout_table} t WHERE {where_sql}"
+                subqueries.append(
+                    f"SELECT {select_base}, `platform` AS payment_method_or_platform, "
+                    f"'takeout' AS order_type FROM {takeout_table} WHERE {where_sql}"
                 )
+                query_params.extend(params)
 
-            if not sub_queries:
+            if not subqueries:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
 
-            union_sql = " UNION ALL ".join(sub_queries)
+            union_sql = " UNION ALL ".join(subqueries)
 
-            # 分页查询
-            db = DineInOrder.get_db_connection()
-            if db is None:
-                return {"total": 0, "page": page, "page_size": page_size, "data": []}
-
-            # 合并参数（两个子查询参数相同）
-            all_params = tuple(params)
-
-            # 查询总数
-            count_sql = f"SELECT COUNT(*) AS total FROM ({union_sql}) merged"
-            count_result = db.execute(count_sql, all_params)
+            # 总行数
+            count_sql = f"SELECT COUNT(*) AS total FROM ({union_sql}) AS combined"
+            count_result = db.execute(count_sql, tuple(query_params))
             total = count_result[0]["total"] if count_result else 0
+            if total == 0:
+                return {"total": 0, "page": page, "page_size": page_size, "data": []}
 
-            # 分页查询
+            # 分页数据
             offset = (page - 1) * page_size
-            list_sql = f"""SELECT merged.*, s.`name` AS store_name
-FROM ({union_sql}) merged
-LEFT JOIN {store_table} s ON s.`id` = merged.`store_id`
-ORDER BY merged.`order_time` DESC
-LIMIT {offset}, {page_size}"""
+            data_sql = f"SELECT * FROM ({union_sql}) AS combined ORDER BY `order_time` DESC LIMIT %s OFFSET %s"
+            data_params = tuple(query_params) + (page_size, offset)
+            rows = db.execute(data_sql, data_params) or []
 
-            results = db.execute(list_sql, all_params)
+            # 查门店名称
+            store_ids_set = set(r["store_id"] for r in rows)
+            store_map = {}
+            if store_ids_set:
+                ids_str = ",".join(str(s) for s in store_ids_set)
+                try:
+                    store_sql = f"SELECT `id`, `name` FROM {store_table} WHERE `id` IN ({ids_str})"
+                    store_results = db.execute(store_sql) or []
+                    store_map = {r["id"]: r["name"] for r in store_results}
+                except Exception:
+                    pass
 
-            # 格式化数据
             data = []
-            for row in (results or []):
+            for row in rows:
                 data.append({
                     "id": row["id"],
                     "store_id": row["store_id"],
-                    "store_name": row.get("store_name", ""),
+                    "store_name": store_map.get(row["store_id"], ""),
                     "order_no": row["order_no"],
                     "total_amount": float(row["total_amount"]),
-                    "payment_method_or_platform": row["payment_method_or_platform"],
+                    "payment_method_or_platform": row.get("payment_method_or_platform", ""),
                     "dish_count": row["dish_count"],
                     "order_time": row["order_time"].isoformat() if hasattr(row["order_time"], "isoformat") else str(row["order_time"]),
                     "order_type": row["order_type"],
@@ -120,7 +117,7 @@ LIMIT {offset}, {page_size}"""
 
             return {"total": total, "page": page, "page_size": page_size, "data": data}
         except Exception as e:
-            logger.error(f"查询订单列表失败: {e}")
+            logger.error(f"查询订单列表失败: {e}", exc_info=True)
             return {"total": 0, "page": page, "page_size": page_size, "data": []}
 
     @staticmethod
