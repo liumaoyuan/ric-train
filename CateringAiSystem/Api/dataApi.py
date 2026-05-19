@@ -117,7 +117,7 @@ def get_dish_detail(dish_id: int, request: Request):
 def list_stores(
     request: Request,
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=9999),
     province: Optional[str] = None,
     city: Optional[str] = None,
     status: Optional[int] = None,

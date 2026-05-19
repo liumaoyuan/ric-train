@@ -1,5 +1,25 @@
 import request from './request'
 
+// 门店选项缓存（全局共享，只加载一次）
+let _storeOptionsCache = null
+let _storeOptionsLoading = null
+
+export function getStoreOptions(force = false) {
+  if (!force && _storeOptionsCache) {
+    return Promise.resolve(_storeOptionsCache)
+  }
+  if (_storeOptionsLoading) {
+    return _storeOptionsLoading
+  }
+  _storeOptionsLoading = getStoreList({ page: 1, page_size: 999 }).then(res => {
+    _storeOptionsCache = res.data?.data || []
+    return _storeOptionsCache
+  }).finally(() => {
+    _storeOptionsLoading = null
+  })
+  return _storeOptionsLoading
+}
+
 // ==================== 订单 ====================
 export function getOrderList(params) {
   return request.get('/data/orders', { params })
