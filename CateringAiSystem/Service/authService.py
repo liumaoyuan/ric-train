@@ -1,6 +1,7 @@
 import logging
 
 from CateringAiSystem.Models.sysModels import SysUser, SysRole, SysUserRole, SysRoleMenu, SysMenu
+from CateringAiSystem.Service.sysMenuService import SysMenuService
 from CateringAiSystem.Utils.authUtils import (
     verify_password,
     hash_password,
@@ -74,6 +75,35 @@ class AuthService:
             "roles": roles,
             "permissions": permissions,
         }
+
+    @staticmethod
+    def get_user_menu_tree(user_id: int, user_roles: list) -> list:
+        """获取当前用户有权限的菜单树（admin 拥有全部菜单）"""
+        if "admin" in user_roles:
+            return SysMenuService.get_tree()
+
+        try:
+            db = SysUser.get_db_connection()
+            if db is None:
+                return []
+
+            ur_table = SysUserRole.get_table_name_with_db()
+            rm_table = SysRoleMenu.get_table_name_with_db()
+
+            sql = f"""SELECT DISTINCT rm.`menu_id`
+FROM {ur_table} ur
+JOIN {rm_table} rm ON rm.`role_id` = ur.`role_id`
+WHERE ur.`user_id` = %s"""
+            results = db.execute(sql, (user_id,))
+            menu_ids = set(row["menu_id"] for row in results) if results else set()
+
+            if not menu_ids:
+                return []
+
+            return SysMenuService.get_filtered_tree(menu_ids)
+        except Exception as e:
+            logger.error(f"获取用户菜单树失败: {e}")
+            return []
 
     @staticmethod
     def refresh_access_token(refresh_token: str) -> dict | None:

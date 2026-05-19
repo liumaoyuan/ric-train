@@ -15,29 +15,7 @@
         active-text-color="#fff"
         router
       >
-        <el-menu-item index="/dashboard">
-          <el-icon><HomeFilled /></el-icon>
-          <span>首页</span>
-        </el-menu-item>
-
-        <el-sub-menu index="sys">
-          <template #title>
-            <el-icon><Setting /></el-icon>
-            <span>系统管理</span>
-          </template>
-          <el-menu-item v-if="hasPerm('sys:user:list')" index="/sys/user">
-            <el-icon><User /></el-icon>
-            <span>用户管理</span>
-          </el-menu-item>
-          <el-menu-item v-if="hasPerm('sys:role:list')" index="/sys/role">
-            <el-icon><Avatar /></el-icon>
-            <span>角色管理</span>
-          </el-menu-item>
-          <el-menu-item v-if="hasPerm('sys:menu:list')" index="/sys/menu">
-            <el-icon><Menu /></el-icon>
-            <span>菜单管理</span>
-          </el-menu-item>
-        </el-sub-menu>
+        <MenuItemTree v-for="item in sidebarMenus" :key="item.id" :item="item" />
       </el-menu>
     </el-aside>
 
@@ -84,7 +62,13 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
+import { filterMenuTree } from '../router/dynamicRoutes'
 import { ElMessageBox } from 'element-plus'
+import {
+  HomeFilled, Setting, Menu as MenuIcon, User, Avatar,
+  Fold, Expand, UserFilled, ArrowDown,
+} from '@element-plus/icons-vue'
+import MenuItemTree from './MenuItemTree.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -94,9 +78,8 @@ const isCollapse = ref(false)
 
 const activeMenu = computed(() => route.path)
 
-function hasPerm(code) {
-  return authStore.hasPermission(code)
-}
+// 侧边栏菜单树（从 store 中获取并过滤）
+const sidebarMenus = computed(() => filterMenuTree(authStore.menuTree))
 
 function handleCommand(command) {
   if (command === 'logout') {

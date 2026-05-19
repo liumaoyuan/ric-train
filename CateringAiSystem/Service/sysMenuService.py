@@ -23,6 +23,32 @@ class SysMenuService:
             return []
 
     @staticmethod
+    def get_filtered_tree(allowed_ids: set) -> list:
+        """根据菜单 ID 集合过滤菜单树（保留祖先节点以保证树结构完整）"""
+        try:
+            menus = SysMenu.get_all(order_by="sort_order", order="ASC")
+            if not menus:
+                return []
+
+            menu_list = [m.to_dict() for m in menus]
+
+            # 收集所有需要保留的 ID（包含祖先节点）
+            all_ids = set(allowed_ids)
+            id_to_parent = {m["id"]: m["parent_id"] for m in menu_list}
+
+            for mid in list(allowed_ids):
+                parent = id_to_parent.get(mid, 0)
+                while parent != 0:
+                    all_ids.add(parent)
+                    parent = id_to_parent.get(parent, 0)
+
+            filtered = [m for m in menu_list if m["id"] in all_ids]
+            return SysMenuService._build_tree(filtered, parent_id=0)
+        except Exception as e:
+            logger.error(f"获取过滤菜单树失败: {e}")
+            return []
+
+    @staticmethod
     def _build_tree(menu_list: list, parent_id: int) -> list:
         """递归构建菜单树"""
         tree = []

@@ -1,5 +1,9 @@
 import request from './request'
 
+export function getCurrentUserMenus() {
+  return request.get('/auth/menus')
+}
+
 export function getMenuTree() {
   return request.get('/sys/menu/tree')
 }

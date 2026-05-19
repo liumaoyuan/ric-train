@@ -1,7 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../store/auth'
+import { generateRoutes } from './dynamicRoutes'
 
-const routes = [
+// 固定路由 — 不依赖后端菜单，始终可访问
+export const fixedRoutes = [
   {
     path: '/login',
     name: 'Login',
@@ -9,62 +11,124 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
-    path: '/',
-    component: () => import('../layout/MainLayout.vue'),
-    meta: { requiresAuth: true },
-    redirect: '/dashboard',
-    children: [
-      {
-        path: 'dashboard',
-        name: 'Dashboard',
-        component: () => import('../views/dashboard/Dashboard.vue'),
-        meta: { title: '首页' },
-      },
-      {
-        path: 'sys/user',
-        name: 'SysUser',
-        component: () => import('../views/sys/user/UserList.vue'),
-        meta: { title: '用户管理', permission: 'sys:user:list' },
-      },
-      {
-        path: 'sys/role',
-        name: 'SysRole',
-        component: () => import('../views/sys/role/RoleList.vue'),
-        meta: { title: '角色管理', permission: 'sys:role:list' },
-      },
-      {
-        path: 'sys/menu',
-        name: 'SysMenu',
-        component: () => import('../views/sys/menu/MenuList.vue'),
-        meta: { title: '菜单管理', permission: 'sys:menu:list' },
-      },
-    ],
+    path: '/401',
+    name: 'NotAuth',
+    component: () => import('../views/error/401.vue'),
+    meta: { requiresAuth: false },
+  },
+  {
+    path: '/404',
+    name: 'NotFound',
+    component: () => import('../views/error/404.vue'),
+    meta: { requiresAuth: false },
   },
 ]
 
+// 布局路由 — Dashboard 是固定子路由，其他由动态路由填充
+const LAYOUT_NAME = 'Layout'
+
+const layoutRoute = {
+  path: '/',
+  name: LAYOUT_NAME,
+  component: () => import('../layout/MainLayout.vue'),
+  meta: { requiresAuth: true },
+  redirect: '/dashboard',
+  children: [
+    {
+      path: 'dashboard',
+      name: 'Dashboard',
+      component: () => import('../views/dashboard/Dashboard.vue'),
+      meta: { title: '首页' },
+    },
+  ],
+}
+
 const router = createRouter({
   history: createWebHistory(),
-  routes,
+  routes: [...fixedRoutes, layoutRoute],
 })
 
+// 记录已添加的动态路由 name，用于重复添加时清理
+let dynamicRouteNames = []
+
+/**
+ * 根据 store 中的菜单树重建动态路由
+ * 在登录完成或页面刷新时调用
+ */
+export function rebuildDynamicRoutes() {
+  // 移除旧的动态路由
+  dynamicRouteNames.forEach(name => {
+    if (router.hasRoute(name)) {
+      router.removeRoute(name)
+    }
+  })
+  dynamicRouteNames = []
+
+  const authStore = useAuthStore()
+  if (!authStore.isLoggedIn) return
+
+  const menuTree = authStore.menuTree
+  if (!menuTree || menuTree.length === 0) return
+
+  const children = generateRoutes(menuTree)
+  children.forEach(route => {
+    router.addRoute(LAYOUT_NAME, route)
+    dynamicRouteNames.push(route.name)
+  })
+}
+
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
+  // 公开页面直接放行
   if (to.meta.requiresAuth === false) {
     next()
     return
   }
 
+  // 未登录跳转登录页
   if (!authStore.isLoggedIn) {
     next('/login')
     return
   }
 
-  // 检查页面级权限
+  // 确保动态路由已加载
+  if (dynamicRouteNames.length === 0) {
+    rebuildDynamicRoutes()
+
+    if (dynamicRouteNames.length === 0) {
+      try {
+        await authStore.fetchMenus()
+        rebuildDynamicRoutes()
+      } catch {
+        next('/dashboard')
+        return
+      }
+    }
+
+    next({ ...to, replace: true })
+    return
+  }
+
+  // 权限校验
   const permission = to.meta.permission
   if (permission && !authStore.hasPermission(permission)) {
-    next('/dashboard')
+    next('/401')
+    return
+  }
+
+  // 未匹配任何路由 → 尝试从后端重新获取菜单后重试，仍不匹配则 404
+  if (to.matched.length === 0) {
+    try {
+      await authStore.fetchMenus()
+      rebuildDynamicRoutes()
+    } catch {
+      next({ name: 'NotFound' })
+      return
+    }
+    // 路由已重建，重新解析目标路由
+    next({ ...to, replace: true })
     return
   }
 

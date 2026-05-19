@@ -41,6 +41,14 @@ def userinfo(request: Request):
     return {"code": 200, "msg": "success", "data": info}
 
 
+@router.get("/menus")
+def current_user_menus(request: Request):
+    """获取当前用户的菜单树（根据角色权限过滤）"""
+    user = get_current_user(request)
+    tree = AuthService.get_user_menu_tree(user["user_id"], user.get("roles", []))
+    return {"code": 200, "msg": "success", "data": tree}
+
+
 @router.post("/refresh")
 def refresh_token(param: RefreshParam):
     """刷新访问令牌"""
