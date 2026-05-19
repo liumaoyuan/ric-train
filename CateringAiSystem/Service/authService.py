@@ -1,6 +1,6 @@
 import logging
 
-from CateringAiSystem.Models import SysUser, SysRole, SysUserRole, SysRoleMenu, SysMenu
+from CateringAiSystem.Models import SysUser
 from CateringAiSystem.Service.sysMenuService import SysMenuService
 from CateringAiSystem.Utils.authUtils import (
     verify_password,
@@ -39,8 +39,8 @@ class AuthService:
             return None
 
         # 获取角色和权限
-        roles = AuthService._get_user_roles(user.id)
-        permissions = AuthService._get_user_permissions(user.id)
+        roles = SysUser.get_role_codes(user.id)
+        permissions = SysUser.get_permission_codes(user.id)
 
         # 生成令牌
         tokens = create_tokens(user.id, user.username, roles, permissions)
@@ -61,8 +61,8 @@ class AuthService:
         if user is None:
             return None
 
-        roles = AuthService._get_user_roles(user_id)
-        permissions = AuthService._get_user_permissions(user_id)
+        roles = SysUser.get_role_codes(user_id)
+        permissions = SysUser.get_permission_codes(user_id)
 
         return {
             "user_id": user.id,
@@ -82,28 +82,11 @@ class AuthService:
         if "admin" in user_roles:
             return SysMenuService.get_tree()
 
-        try:
-            db = SysUser.get_db_connection()
-            if db is None:
-                return []
-
-            ur_table = SysUserRole.get_table_name_with_db()
-            rm_table = SysRoleMenu.get_table_name_with_db()
-
-            sql = f"""SELECT DISTINCT rm.`menu_id`
-FROM {ur_table} ur
-JOIN {rm_table} rm ON rm.`role_id` = ur.`role_id`
-WHERE ur.`user_id` = %s"""
-            results = db.execute(sql, (user_id,))
-            menu_ids = set(row["menu_id"] for row in results) if results else set()
-
-            if not menu_ids:
-                return []
-
-            return SysMenuService.get_filtered_tree(menu_ids)
-        except Exception as e:
-            logger.error(f"获取用户菜单树失败: {e}")
+        menu_ids = SysUser.get_user_menu_ids(user_id)
+        if not menu_ids:
             return []
+
+        return SysMenuService.get_filtered_tree(menu_ids)
 
     @staticmethod
     def refresh_access_token(refresh_token: str) -> dict | None:
@@ -123,8 +106,8 @@ WHERE ur.`user_id` = %s"""
         user_id = payload.get("user_id")
         username = payload.get("username")
 
-        roles = AuthService._get_user_roles(user_id)
-        permissions = AuthService._get_user_permissions(user_id)
+        roles = SysUser.get_role_codes(user_id)
+        permissions = SysUser.get_permission_codes(user_id)
 
         new_access_token = create_access_token({
             "user_id": user_id,
@@ -137,43 +120,3 @@ WHERE ur.`user_id` = %s"""
             "access_token": new_access_token,
             "token_type": "Bearer",
         }
-
-    @staticmethod
-    def _get_user_roles(user_id: int) -> list:
-        """获取用户的所有角色编码"""
-        try:
-            db = SysUser.get_db_connection()
-            if db is None:
-                return []
-            table_name = SysUserRole.get_table_name_with_db()
-            role_table = SysRole.get_table_name_with_db()
-            sql = f"""SELECT r.`role_code`
-FROM {table_name} ur
-JOIN {role_table} r ON r.`id` = ur.`role_id`
-WHERE ur.`user_id` = %s AND r.`status` = 1"""
-            results = db.execute(sql, (user_id,))
-            return [row["role_code"] for row in results] if results else []
-        except Exception as e:
-            logger.error(f"获取用户角色失败: {e}")
-            return []
-
-    @staticmethod
-    def _get_user_permissions(user_id: int) -> list:
-        """获取用户的所有权限标识"""
-        try:
-            db = SysUser.get_db_connection()
-            if db is None:
-                return []
-            ur_table = SysUserRole.get_table_name_with_db()
-            rm_table = SysRoleMenu.get_table_name_with_db()
-            menu_table = SysMenu.get_table_name_with_db()
-            sql = f"""SELECT DISTINCT m.`permission_code`
-FROM {ur_table} ur
-JOIN {rm_table} rm ON rm.`role_id` = ur.`role_id`
-JOIN {menu_table} m ON m.`id` = rm.`menu_id`
-WHERE ur.`user_id` = %s AND m.`permission_code` IS NOT NULL AND m.`permission_code` != ''"""
-            results = db.execute(sql, (user_id,))
-            return [row["permission_code"] for row in results] if results else []
-        except Exception as e:
-            logger.error(f"获取用户权限失败: {e}")
-            return []

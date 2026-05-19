@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, List
 
-from CateringAiSystem.Models import SysMenu, SysRoleMenu
+from CateringAiSystem.Models import SysMenu
 
 logger = logging.getLogger(__name__)
 
@@ -125,22 +125,4 @@ class SysMenuService:
     @staticmethod
     def delete(menu_id: int) -> dict:
         """删除菜单，返回操作结果"""
-        try:
-            db = SysMenu.get_db_connection()
-            if db is None:
-                return {"success": False, "message": "数据库连接失败"}
-
-            # 检查是否有子节点
-            children = SysMenu.find_by(parent_id=menu_id)
-            if children:
-                return {"success": False, "message": f"该菜单下存在 {len(children)} 个子节点，请先删除子节点"}
-
-            # 删除角色-菜单关联
-            rm_table = SysRoleMenu.get_table_name_with_db()
-            db.execute(f"DELETE FROM {rm_table} WHERE `menu_id` = %s", (menu_id,), commit=True)
-
-            SysMenu.delete_by_id(menu_id)
-            return {"success": True, "message": "删除成功"}
-        except Exception as e:
-            logger.error(f"删除菜单失败: {e}")
-            return {"success": False, "message": f"删除失败: {e}"}
+        return SysMenu.delete_cascade(menu_id)

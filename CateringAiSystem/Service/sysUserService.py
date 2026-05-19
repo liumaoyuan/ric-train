@@ -13,48 +13,7 @@ class SysUserService:
     def get_list(page: int = 1, page_size: int = 20, username: Optional[str] = None,
                  status: Optional[int] = None) -> dict:
         """分页查询用户列表"""
-        try:
-            db = SysUser.get_db_connection()
-            if db is None:
-                return {"total": 0, "page": page, "page_size": page_size, "data": []}
-
-            table_name = SysUser.get_table_name_with_db()
-            where_clauses = []
-            params = []
-
-            if username:
-                where_clauses.append("`username` LIKE %s")
-                params.append(f"%{username}%")
-            if status is not None:
-                where_clauses.append("`status` = %s")
-                params.append(status)
-
-            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
-
-            # 查询总数
-            count_sql = f"SELECT COUNT(*) AS total FROM {table_name} WHERE {where_sql}"
-            count_result = db.execute(count_sql, tuple(params))
-            total = count_result[0]["total"] if count_result else 0
-
-            # 查询列表
-            offset = (page - 1) * page_size
-            list_sql = f"""SELECT `id`, `username`, `display_name`, `phone`, `email`,
-`avatar`, `status`, `remark`, `created_at`, `updated_at`
-FROM {table_name}
-WHERE {where_sql}
-ORDER BY `created_at` DESC
-LIMIT {offset}, {page_size}"""
-            results = db.execute(list_sql, tuple(params))
-
-            return {
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-                "data": results or [],
-            }
-        except Exception as e:
-            logger.error(f"查询用户列表失败: {e}")
-            return {"total": 0, "page": page, "page_size": page_size, "data": []}
+        return SysUser.get_paginated_list(page, page_size, username, status)
 
     @staticmethod
     def get_detail(user_id: int) -> Optional[dict]:
@@ -126,17 +85,7 @@ LIMIT {offset}, {page_size}"""
     @staticmethod
     def delete(user_id: int) -> bool:
         """删除用户"""
-        try:
-            db = SysUser.get_db_connection()
-            if db is None:
-                return False
-            # 先删除用户-角色关联
-            ur_table = SysUserRole.get_table_name_with_db()
-            db.execute(f"DELETE FROM {ur_table} WHERE `user_id` = %s", (user_id,), commit=True)
-            return SysUser.delete_by_id(user_id)
-        except Exception as e:
-            logger.error(f"删除用户失败: {e}")
-            return False
+        return SysUser.delete_cascade(user_id)
 
     @staticmethod
     def toggle_status(user_id: int) -> Optional[int]:
@@ -177,23 +126,4 @@ LIMIT {offset}, {page_size}"""
     @staticmethod
     def assign_roles(user_id: int, role_ids: list) -> bool:
         """分配角色（全量替换）"""
-        try:
-            db = SysUser.get_db_connection()
-            if db is None:
-                return False
-
-            table_name = SysUserRole.get_table_name_with_db()
-
-            # 删除旧关联
-            db.execute(f"DELETE FROM {table_name} WHERE `user_id` = %s", (user_id,), commit=True)
-
-            # 批量插入新关联
-            if role_ids:
-                values = ",".join([f"({user_id}, {rid})" for rid in role_ids])
-                sql = f"INSERT INTO {table_name} (`user_id`, `role_id`) VALUES {values}"
-                db.execute(sql, commit=True)
-
-            return True
-        except Exception as e:
-            logger.error(f"分配角色失败: {e}")
-            return False
+        return SysUser.assign_roles(user_id, role_ids)

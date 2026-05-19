@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime
 from typing import Optional, ClassVar
 
 from pydantic import Field
 
 from Base.Repository.models.defaultDbModel import DefaultDbModel
+
+logger = logging.getLogger(__name__)
 
 
 class SysMenu(DefaultDbModel):
@@ -47,3 +50,26 @@ class SysMenu(DefaultDbModel):
     updated_at: Optional[datetime] = Field(None, description="更新时间")
     created_by: Optional[int] = Field(None, description="创建人ID")
     updated_by: Optional[int] = Field(None, description="更新人ID")
+
+    @classmethod
+    def delete_cascade(cls, menu_id: int) -> dict:
+        """删除菜单及其关联（检查子节点 + 删除角色关联）"""
+        try:
+            db = cls.get_db_connection()
+            if db is None:
+                return {"success": False, "message": "数据库连接失败"}
+
+            from .sysRoleMenu import SysRoleMenu
+
+            children = cls.find_by(parent_id=menu_id)
+            if children:
+                return {"success": False, "message": f"该菜单下存在 {len(children)} 个子节点，请先删除子节点"}
+
+            rm_table = SysRoleMenu.get_table_name_with_db()
+            db.execute(f"DELETE FROM {rm_table} WHERE `menu_id` = %s", (menu_id,), commit=True)
+
+            cls.delete_by_id(menu_id)
+            return {"success": True, "message": "删除成功"}
+        except Exception as e:
+            logger.error(f"删除菜单失败: {e}")
+            return {"success": False, "message": f"删除失败: {e}"}

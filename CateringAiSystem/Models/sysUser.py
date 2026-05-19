@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime
 from typing import Optional, ClassVar
 
 from pydantic import Field
 
 from Base.Repository.models.defaultDbModel import DefaultDbModel
+
+logger = logging.getLogger(__name__)
 
 
 class SysUser(DefaultDbModel):
@@ -42,3 +45,154 @@ class SysUser(DefaultDbModel):
     updated_at: Optional[datetime] = Field(None, description="更新时间")
     created_by: Optional[int] = Field(None, description="创建人ID")
     updated_by: Optional[int] = Field(None, description="更新人ID")
+
+    @classmethod
+    def get_paginated_list(cls, page: int = 1, page_size: int = 20,
+                           username: Optional[str] = None,
+                           status: Optional[int] = None) -> dict:
+        """分页查询用户列表"""
+        try:
+            db = cls.get_db_connection()
+            if db is None:
+                return {"total": 0, "page": page, "page_size": page_size, "data": []}
+
+            table_name = cls.get_table_name_with_db()
+            where_clauses = []
+            params = []
+
+            if username:
+                where_clauses.append("`username` LIKE %s")
+                params.append(f"%{username}%")
+            if status is not None:
+                where_clauses.append("`status` = %s")
+                params.append(status)
+
+            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+            count_sql = f"SELECT COUNT(*) AS total FROM {table_name} WHERE {where_sql}"
+            count_result = db.execute(count_sql, tuple(params))
+            total = count_result[0]["total"] if count_result else 0
+
+            offset = (page - 1) * page_size
+            list_sql = f"""SELECT `id`, `username`, `display_name`, `phone`, `email`,
+`avatar`, `status`, `remark`, `created_at`, `updated_at`
+FROM {table_name}
+WHERE {where_sql}
+ORDER BY `created_at` DESC
+LIMIT {offset}, {page_size}"""
+            results = db.execute(list_sql, tuple(params))
+
+            return {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "data": results or [],
+            }
+        except Exception as e:
+            logger.error(f"查询用户列表失败: {e}")
+            return {"total": 0, "page": page, "page_size": page_size, "data": []}
+
+    @classmethod
+    def delete_cascade(cls, user_id: int) -> bool:
+        """删除用户及其关联的角色"""
+        try:
+            db = cls.get_db_connection()
+            if db is None:
+                return False
+            from .sysUserRole import SysUserRole
+            ur_table = SysUserRole.get_table_name_with_db()
+            db.execute(f"DELETE FROM {ur_table} WHERE `user_id` = %s", (user_id,), commit=True)
+            return cls.delete_by_id(user_id)
+        except Exception as e:
+            logger.error(f"删除用户失败: {e}")
+            return False
+
+    @classmethod
+    def assign_roles(cls, user_id: int, role_ids: list) -> bool:
+        """全量替换用户角色"""
+        try:
+            db = cls.get_db_connection()
+            if db is None:
+                return False
+            from .sysUserRole import SysUserRole
+            table_name = SysUserRole.get_table_name_with_db()
+
+            db.execute(f"DELETE FROM {table_name} WHERE `user_id` = %s", (user_id,), commit=True)
+
+            if role_ids:
+                values = ",".join([f"({user_id}, {rid})" for rid in role_ids])
+                sql = f"INSERT INTO {table_name} (`user_id`, `role_id`) VALUES {values}"
+                db.execute(sql, commit=True)
+
+            return True
+        except Exception as e:
+            logger.error(f"分配角色失败: {e}")
+            return False
+
+    @classmethod
+    def get_user_menu_ids(cls, user_id: int) -> set:
+        """获取用户有权限的菜单ID集合"""
+        try:
+            from .sysUserRole import SysUserRole
+            from .sysRoleMenu import SysRoleMenu
+            db = cls.get_db_connection()
+            if db is None:
+                return set()
+
+            ur_table = SysUserRole.get_table_name_with_db()
+            rm_table = SysRoleMenu.get_table_name_with_db()
+
+            sql = f"""SELECT DISTINCT rm.`menu_id`
+FROM {ur_table} ur
+JOIN {rm_table} rm ON rm.`role_id` = ur.`role_id`
+WHERE ur.`user_id` = %s"""
+            results = db.execute(sql, (user_id,))
+            return set(row["menu_id"] for row in results) if results else set()
+        except Exception as e:
+            logger.error(f"获取用户菜单ID失败: {e}")
+            return set()
+
+    @classmethod
+    def get_role_codes(cls, user_id: int) -> list:
+        """获取用户的所有角色编码"""
+        try:
+            from .sysUserRole import SysUserRole
+            from .sysRole import SysRole
+            db = cls.get_db_connection()
+            if db is None:
+                return []
+            ur_table = SysUserRole.get_table_name_with_db()
+            role_table = SysRole.get_table_name_with_db()
+            sql = f"""SELECT r.`role_code`
+FROM {ur_table} ur
+JOIN {role_table} r ON r.`id` = ur.`role_id`
+WHERE ur.`user_id` = %s AND r.`status` = 1"""
+            results = db.execute(sql, (user_id,))
+            return [row["role_code"] for row in results] if results else []
+        except Exception as e:
+            logger.error(f"获取用户角色失败: {e}")
+            return []
+
+    @classmethod
+    def get_permission_codes(cls, user_id: int) -> list:
+        """获取用户的所有权限标识"""
+        try:
+            from .sysUserRole import SysUserRole
+            from .sysRoleMenu import SysRoleMenu
+            from .sysMenu import SysMenu
+            db = cls.get_db_connection()
+            if db is None:
+                return []
+            ur_table = SysUserRole.get_table_name_with_db()
+            rm_table = SysRoleMenu.get_table_name_with_db()
+            menu_table = SysMenu.get_table_name_with_db()
+            sql = f"""SELECT DISTINCT m.`permission_code`
+FROM {ur_table} ur
+JOIN {rm_table} rm ON rm.`role_id` = ur.`role_id`
+JOIN {menu_table} m ON m.`id` = rm.`menu_id`
+WHERE ur.`user_id` = %s AND m.`permission_code` IS NOT NULL AND m.`permission_code` != ''"""
+            results = db.execute(sql, (user_id,))
+            return [row["permission_code"] for row in results] if results else []
+        except Exception as e:
+            logger.error(f"获取用户权限失败: {e}")
+            return []

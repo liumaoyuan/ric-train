@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime
 from typing import Optional, ClassVar
 
 from pydantic import Field
 
 from Base.Repository.models.defaultDbModel import DefaultDbModel
+
+logger = logging.getLogger(__name__)
 
 
 class SysRole(DefaultDbModel):
@@ -36,3 +39,94 @@ class SysRole(DefaultDbModel):
     updated_at: Optional[datetime] = Field(None, description="更新时间")
     created_by: Optional[int] = Field(None, description="创建人ID")
     updated_by: Optional[int] = Field(None, description="更新人ID")
+
+    @classmethod
+    def get_paginated_list(cls, page: int = 1, page_size: int = 20,
+                           role_name: Optional[str] = None,
+                           status: Optional[int] = None) -> dict:
+        """分页查询角色列表"""
+        try:
+            db = cls.get_db_connection()
+            if db is None:
+                return {"total": 0, "page": page, "page_size": page_size, "data": []}
+
+            table_name = cls.get_table_name_with_db()
+            where_clauses = []
+            params = []
+
+            if role_name:
+                where_clauses.append("`role_name` LIKE %s")
+                params.append(f"%{role_name}%")
+            if status is not None:
+                where_clauses.append("`status` = %s")
+                params.append(status)
+
+            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+            count_sql = f"SELECT COUNT(*) AS total FROM {table_name} WHERE {where_sql}"
+            count_result = db.execute(count_sql, tuple(params))
+            total = count_result[0]["total"] if count_result else 0
+
+            offset = (page - 1) * page_size
+            list_sql = f"""SELECT * FROM {table_name}
+WHERE {where_sql}
+ORDER BY `sort_order` ASC, `id` ASC
+LIMIT {offset}, {page_size}"""
+            results = db.execute(list_sql, tuple(params))
+
+            return {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "data": results or [],
+            }
+        except Exception as e:
+            logger.error(f"查询角色列表失败: {e}")
+            return {"total": 0, "page": page, "page_size": page_size, "data": []}
+
+    @classmethod
+    def delete_cascade(cls, role_id: int) -> dict:
+        """删除角色及其关联（检查用户关联 + 删除菜单关联）"""
+        try:
+            db = cls.get_db_connection()
+            if db is None:
+                return {"success": False, "message": "数据库连接失败"}
+
+            from .sysUserRole import SysUserRole
+            from .sysRoleMenu import SysRoleMenu
+
+            user_links = SysUserRole.find_by(role_id=role_id)
+            if user_links:
+                return {"success": False, "message": f"该角色下存在 {len(user_links)} 个关联用户，无法删除"}
+
+            rm_table = SysRoleMenu.get_table_name_with_db()
+            db.execute(f"DELETE FROM {rm_table} WHERE `role_id` = %s", (role_id,), commit=True)
+
+            cls.delete_by_id(role_id)
+            return {"success": True, "message": "删除成功"}
+        except Exception as e:
+            logger.error(f"删除角色失败: {e}")
+            return {"success": False, "message": f"删除失败: {e}"}
+
+    @classmethod
+    def assign_menus(cls, role_id: int, menu_ids: list) -> bool:
+        """全量替换角色的菜单权限"""
+        try:
+            db = cls.get_db_connection()
+            if db is None:
+                return False
+
+            from .sysRoleMenu import SysRoleMenu
+            table_name = SysRoleMenu.get_table_name_with_db()
+
+            db.execute(f"DELETE FROM {table_name} WHERE `role_id` = %s", (role_id,), commit=True)
+
+            if menu_ids:
+                values = ",".join([f"({role_id}, {mid})" for mid in menu_ids])
+                sql = f"INSERT INTO {table_name} (`role_id`, `menu_id`) VALUES {values}"
+                db.execute(sql, commit=True)
+
+            return True
+        except Exception as e:
+            logger.error(f"分配菜单权限失败: {e}")
+            return False
