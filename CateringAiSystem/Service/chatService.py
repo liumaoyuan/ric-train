@@ -8,8 +8,7 @@ from Base.Service.aiService import AiService, AuditingTextError
 from Base.Service.keywordService import keyword_replace_question
 from CateringAiSystem.Agent import (
     AgentMemory,
-    create_agent_for_session,
-    clear_agent_cache,
+    get_agent_for_role,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,10 +29,7 @@ class ChatService:
 
     @staticmethod
     def delete_session(session_id: str, user_id: str) -> bool:
-        success = AgentMemory.delete_session(session_id, user_id)
-        if success:
-            clear_agent_cache(user_id, session_id)
-        return success
+        return AgentMemory.delete_session(session_id, user_id)
 
     @staticmethod
     def get_conversation_history(session_id: str, user_id: str) -> list:
@@ -64,36 +60,37 @@ class ChatService:
             yield f"data: {json.dumps({'type': 'start', 'session_id': actual_session_id}, ensure_ascii=False)}\n\n"
 
             # 2. 关键词替换
-            safe_question = keyword_replace_question(question)
+            # safe_question = keyword_replace_question(question)
+            safe_question = question
 
             # 3. 文本审核
-            auditing_dict = AiService.auditing_text(safe_question)
-            if auditing_dict.get("status") == 0:
-                error_msg = "根据《生成式人工智能服务管理暂行办法》，您的问题包含敏感信息，无法处理"
-                cls._save_and_yield_error(question, error_msg, user_id, actual_session_id, start_time)
-                return
+            # auditing_dict = AiService.auditing_text(safe_question)
+            # if auditing_dict.get("status") == 0:
+            #     error_msg = "根据《生成式人工智能服务管理暂行办法》，您的问题包含敏感信息，无法处理"
+            #     cls._save_and_yield_error(question, error_msg, user_id, actual_session_id, start_time)
+            #     return
 
             # 4. 问题改写
-            rewrite = AiService.rewrite_question(
-                question=safe_question,
-                user_id=user_id,
-                session_id=actual_session_id,
-            )
-            final_question = rewrite or safe_question
+            # rewrite = AiService.rewrite_question(
+            #     question=safe_question,
+            #     user_id=user_id,
+            #     session_id=actual_session_id,
+            # )
+            # final_question = rewrite or safe_question
+            final_question = safe_question
 
             # 5. 获取角色权限
             roles = (user_info or {}).get("roles", ["employee"])
 
-            # 6. 创建 Agent 并执行
-            agent = await create_agent_for_session(
-                session_id=actual_session_id,
-                user_id=user_id,
-                role_codes=roles,
-                enable_search=is_online_search,
-            )
+            # 6. 获取角色 Agent（全局单例）并执行
+            agent = await get_agent_for_role(role_codes=roles)
 
             full_answer = []
-            async for event in agent.astream(question=final_question):
+            async for event in agent.astream(
+                session_id=actual_session_id,
+                user_id=user_id,
+                question=final_question,
+            ):
                 event_type = event.get("type", "")
                 event_content = event.get("content", "")
 
@@ -158,12 +155,11 @@ class ChatService:
             final_question = rewrite or safe_question
 
             roles = (user_info or {}).get("roles", ["employee"])
-            agent = await create_agent_for_session(
-                session_id=actual_session_id, user_id=user_id,
-                role_codes=roles, enable_search=is_online_search,
-            )
+            agent = await get_agent_for_role(role_codes=roles)
 
-            answer = await agent.arun(question=final_question)
+            answer = await agent.arun(
+                session_id=actual_session_id, user_id=user_id, question=final_question,
+            )
             cls._save_conversation(question, answer, user_id, actual_session_id, start_time)
             return {"answer": answer, "session_id": actual_session_id}
 

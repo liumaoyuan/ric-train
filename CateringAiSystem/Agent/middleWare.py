@@ -6,6 +6,7 @@
   3. 检查是否超过最大轮数或 token 数 → 触发 AI 摘要压缩
   4. 压缩后更新 Redis + MySQL 摘要，截断消息列表
 """
+import contextvars
 import logging
 from typing import List, Callable, Any
 
@@ -16,9 +17,27 @@ from langchain_core.messages import (
     BaseMessage, SystemMessage, ToolMessage, AIMessage, HumanMessage,
 )
 
-from .memory import AgentMemory
+from CateringAiSystem.Agent.memory import AgentMemory
 
 logger = logging.getLogger(__name__)
+
+# ── 运行时会话上下文（全局单例 Agent 通过 contextvars 区分不同会话） ──
+_session_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("session_id", default="")
+_user_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("user_id", default="")
+
+
+def set_session_context(session_id: str, user_id: str):
+    """设置当前会话上下文（每次调用 Agent 前由 ChatAgent 设置）"""
+    _session_id_var.set(session_id)
+    _user_id_var.set(user_id)
+
+
+def get_session_id() -> str:
+    return _session_id_var.get()
+
+
+def get_user_id() -> str:
+    return _user_id_var.get()
 
 
 class ChatMemoryMiddleware(AgentMiddleware):
@@ -27,19 +46,17 @@ class ChatMemoryMiddleware(AgentMiddleware):
 
     在消息超过阈值时自动对早期对话做 AI 摘要保留最近 N 轮完整对话。
     同时负责在 agent 执行前后与 Redis + MySQL 同步记忆。
+
+    session_id / user_id 通过 contextvars 动态获取，支持全局单例 Agent。
     """
 
     def __init__(
         self,
         llm: BaseChatModel,
-        session_id: str = "",
-        user_id: str = "",
         max_chat_round: int = 20,
         max_tokens: int = 5000,
     ):
         self.llm = llm
-        self.session_id = session_id
-        self.user_id = user_id
         self.max_chat_round = max_chat_round
         self.max_tokens = max_tokens
 
@@ -48,6 +65,10 @@ class ChatMemoryMiddleware(AgentMiddleware):
         state: AgentState,
         next: Callable[[AgentState], Any],
     ) -> AgentState:
+        # 从 contextvars 获取当前会话（支持全局单例 Agent）
+        session_id = get_session_id()
+        user_id = get_user_id()
+
         messages: List[BaseMessage] = state.get("messages", [])
 
         # 1. 拆分消息：系统、工具、普通对话
@@ -86,7 +107,7 @@ class ChatMemoryMiddleware(AgentMiddleware):
         # 5. 持久化摘要到 Redis + MySQL
         try:
             await AgentMemory.compress_and_save(
-                session_id=self.session_id,
+                session_id=session_id,
                 summary_text=summary_text,
                 keep_rounds=self.max_chat_round,
             )
@@ -98,7 +119,7 @@ class ChatMemoryMiddleware(AgentMiddleware):
         state["messages"] = new_messages
 
         logger.info(
-            f"记忆压缩完成 | session={self.session_id[:8]} "
+            f"记忆压缩完成 | session={session_id[:8]} "
             f"压缩前={len(chat_msgs)}轮 压缩后={len(keep_latest)}轮"
         )
         return await next(state)

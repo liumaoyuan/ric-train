@@ -1,3 +1,5 @@
+from fastapi import FastAPI
+
 from CateringAiSystem.Api.authApi import router as auth_router
 from CateringAiSystem.Api.sysUserApi import router as user_router
 from CateringAiSystem.Api.sysRoleApi import router as role_router
@@ -7,7 +9,7 @@ from CateringAiSystem.Api.chatApi import router as chat_router
 from CateringAiSystem.Middleware.authMiddleware import AuthMiddleware
 
 
-def register(app):
+def register(app: FastAPI):
     # 注册中间件
     app.add_middleware(AuthMiddleware)
     # 注册路由
