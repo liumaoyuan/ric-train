@@ -10,6 +10,7 @@ const componentMap = {
   'views/data/DishList.vue': () => import('../views/data/DishList.vue'),
   'views/data/StoreList.vue': () => import('../views/data/StoreList.vue'),
   'views/data/ReviewList.vue': () => import('../views/data/ReviewList.vue'),
+  'views/chat/ChatView.vue': () => import('../views/chat/ChatView.vue'),
 }
 
 const TYPE_MENU = 1

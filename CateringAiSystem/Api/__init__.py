@@ -3,6 +3,7 @@ from CateringAiSystem.Api.sysUserApi import router as user_router
 from CateringAiSystem.Api.sysRoleApi import router as role_router
 from CateringAiSystem.Api.sysMenuApi import router as menu_router
 from CateringAiSystem.Api.dataApi import router as data_router
+from CateringAiSystem.Api.chatApi import router as chat_router
 from CateringAiSystem.Middleware.authMiddleware import AuthMiddleware
 
 
@@ -15,3 +16,4 @@ def register(app):
     app.include_router(role_router)
     app.include_router(menu_router)
     app.include_router(data_router)
+    app.include_router(chat_router)
