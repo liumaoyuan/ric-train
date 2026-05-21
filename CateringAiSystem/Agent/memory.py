@@ -61,9 +61,9 @@ class AgentMemory:
     # ──────────────── 会话管理 ────────────────
 
     @staticmethod
-    def get_or_create_session(user_id: str, title: str = None) -> BaseLLMSession:
+    def get_or_create_session(user_id: str, title: str = None, session_uuid: str = None) -> BaseLLMSession:
         return BaseLLMSession.get_or_create_session(
-            user_id=user_id, title=title or "新对话",
+            user_id=user_id, title=title or "新对话", session_uuid=session_uuid,
         )
 
     @staticmethod

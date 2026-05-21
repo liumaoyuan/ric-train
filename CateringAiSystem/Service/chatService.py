@@ -54,7 +54,7 @@ class ChatService:
 
         try:
             # 1. 会话
-            session = AgentMemory.get_or_create_session(user_id)
+            session = AgentMemory.get_or_create_session(user_id, session_uuid=session_id)
             actual_session_id = session.session_uuid
 
             yield f"data: {json.dumps({'type': 'start', 'session_id': actual_session_id}, ensure_ascii=False)}\n\n"
@@ -141,7 +141,7 @@ class ChatService:
         start_time = time.time()
 
         try:
-            session = AgentMemory.get_or_create_session(user_id)
+            session = AgentMemory.get_or_create_session(user_id, session_uuid=session_id)
             actual_session_id = session.session_uuid
 
             safe_question = keyword_replace_question(question)
