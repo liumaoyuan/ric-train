@@ -1,6 +1,5 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import router from '../router'
 
 const request = axios.create({
   baseURL: '/api/v1',
@@ -32,7 +31,9 @@ request.interceptors.response.use(
         localStorage.removeItem('refresh_token')
         localStorage.removeItem('user_info')
         ElMessage.error('登录已过期，请重新登录')
-        router.push('/login')
+        // 使用 location.href 强制页面跳转，避免在路由守卫执行期间调用 router.push
+        // 导致 authStore token 未同步而产生无限重试
+        window.location.href = '/login'
       } else if (status === 403) {
         ElMessage.error('权限不足')
       } else {
