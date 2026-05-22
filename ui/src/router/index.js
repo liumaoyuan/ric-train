@@ -51,7 +51,7 @@ const router = createRouter({
 // 记录已添加的动态路由 name，用于重复添加时清理
 let dynamicRouteNames = []
 
-// 防止未匹配路由时无限重试
+// 防止菜单接口返回非200时无限重试
 let _menuFetchRetried = false
 
 /**
@@ -101,13 +101,15 @@ router.beforeEach(async (to, from, next) => {
     rebuildDynamicRoutes()
 
     if (dynamicRouteNames.length === 0) {
-      try {
-        await authStore.fetchMenus()
-        rebuildDynamicRoutes()
-      } catch {
-        next('/dashboard')
+      if (_menuFetchRetried) {
+        // 已重试过但仍无菜单，直接放行避免死循环
+        _menuFetchRetried = false
+        next()
         return
       }
+      _menuFetchRetried = true
+      await authStore.fetchMenus()
+      rebuildDynamicRoutes()
     }
 
     next({ ...to, replace: true })
@@ -129,14 +131,8 @@ router.beforeEach(async (to, from, next) => {
       return
     }
     _menuFetchRetried = true
-    try {
-      await authStore.fetchMenus()
-      rebuildDynamicRoutes()
-    } catch {
-      _menuFetchRetried = false
-      next({ name: 'NotFound' })
-      return
-    }
+    await authStore.fetchMenus()
+    rebuildDynamicRoutes()
     // 路由已重建，重新解析目标路由
     next({ ...to, replace: true })
     return

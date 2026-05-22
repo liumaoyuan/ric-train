@@ -28,8 +28,8 @@ class ChatService:
         return AgentMemory.list_sessions(user_id, limit, offset)
 
     @staticmethod
-    def delete_session(session_id: str, user_id: str) -> bool:
-        return AgentMemory.delete_session(session_id, user_id)
+    async def delete_session(session_id: str, user_id: str) -> bool:
+        return await AgentMemory.delete_session(session_id, user_id)
 
     @staticmethod
     def get_conversation_history(session_id: str, user_id: str) -> list:

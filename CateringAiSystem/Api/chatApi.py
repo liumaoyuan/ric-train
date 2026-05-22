@@ -101,10 +101,10 @@ def create_session(param: CreateSessionParam, request: Request):
 
 
 @router.delete("/session/delete")
-def delete_session(session_id: str, request: Request):
+async def delete_session(session_id: str, request: Request):
     """删除会话"""
     user = get_current_user(request)
-    success = ChatService.delete_session(session_id, str(user["user_id"]))
+    success = await ChatService.delete_session(session_id, str(user["user_id"]))
     if success:
         return {"code": 200, "msg": "删除成功", "data": None}
     return {"code": 404, "msg": "会话不存在或无权删除", "data": None}

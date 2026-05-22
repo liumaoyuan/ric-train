@@ -253,6 +253,7 @@ async function handleDeleteSession(sessionId) {
       cancelButtonText: '取消',
     })
     await deleteSession(sessionId)
+    ElMessage.success('删除成功')
     sessions.value = sessions.value.filter(s => s.session_id !== sessionId)
     if (currentSessionId.value === sessionId) {
       currentSessionId.value = sessions.value[0]?.session_id || ''

@@ -13,6 +13,7 @@ import json
 import logging
 from typing import List, Optional, Tuple
 
+from Base.Config.setting import settings
 from Base.Models.BaseLLMConversationModel import BaseLLMConversationModel
 from Base.Models.BaseLLMSession import BaseLLMSession
 from Base.Service.llmConversationService import save_conversation_from_db_2_vdb_only_data
@@ -23,8 +24,8 @@ logger = logging.getLogger(__name__)
 # ── Redis key 前缀与 TTL ──
 MEMORY_KEY_PREFIX = "agent:memory:"
 SUMMARY_KEY_PREFIX = "agent:summary:"
-MEMORY_TTL = 86400       # 消息列表 24h
-SUMMARY_TTL = 604800     # 摘要 7d
+MEMORY_TTL = 86400  # 消息列表 24h
+SUMMARY_TTL = 604800  # 摘要 7d
 
 # ── 缓存引用（延迟初始化） ──
 _async_redis = None
@@ -40,12 +41,12 @@ async def _get_redis():
         except Exception:
             _async_redis = None
     try:
-        from Base.Client.redisClient import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
+        redis_config = settings.redis
         import redis.asyncio as aioredis
         _async_redis = aioredis.Redis(
-            host=REDIS_HOST, port=REDIS_PORT,
-            password=REDIS_PASSWORD or None,
-            db=REDIS_DB, decode_responses=True,
+            host=redis_config.host, port=redis_config.port,
+            password=redis_config.password or None,
+            db=redis_config.db, decode_responses=True,
         )
         await _async_redis.ping()
         logger.info("Async Redis 连接成功 (memory)")
@@ -224,9 +225,9 @@ class AgentMemory:
 
     @staticmethod
     def save_conversation(
-        question: str, answer: str, user_id: str, session_id: str,
-        duration_ms: int, rewrite_question: str = "",
-        reasoning: str = "", status: str = "success",
+            question: str, answer: str, user_id: str, session_id: str,
+            duration_ms: int, rewrite_question: str = "",
+            reasoning: str = "", status: str = "success",
     ):
         """保存到 MySQL + Milvus"""
         try:
@@ -275,7 +276,7 @@ class AgentMemory:
 
     @classmethod
     async def build_memory_messages(
-        cls, session_id: str, user_id: str, max_recent: int = 20,
+            cls, session_id: str, user_id: str, max_recent: int = 20,
     ) -> Tuple[List[BaseMessage], str]:
         """构建记忆上下文消息列表
 
@@ -323,7 +324,7 @@ class AgentMemory:
 
     @classmethod
     async def compress_and_save(
-        cls, session_id: str, summary_text: str, keep_rounds: int = 10,
+            cls, session_id: str, summary_text: str, keep_rounds: int = 10,
     ):
         """压缩记忆：更新 Redis + MySQL 摘要，截断消息列表"""
         await cls.save_summary_to_redis(session_id, summary_text)

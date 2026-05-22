@@ -93,12 +93,12 @@ class ChatAgent:
         )
 
         self._agent = create_agent(
-            model=llm_models.get_qian_wen(),
+            model=llm_models.get_deepseek(),
             system_prompt=system_prompt,
             tools=tools,
             middleware=[
                 ChatMemoryMiddleware(
-                    llm=llm_models.get_qian_wen(),
+                    llm=llm_models.get_deepseek(),
                     max_chat_round=20,
                     max_tokens=5000,
                 ),
