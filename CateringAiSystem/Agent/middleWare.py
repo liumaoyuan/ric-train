@@ -8,14 +8,18 @@
 """
 import contextvars
 import logging
-from typing import List, Callable, Any
+import uuid
+from typing import Any
 
-from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.types import AgentState
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
+    RemoveMessage,
     BaseMessage, SystemMessage, ToolMessage, AIMessage, HumanMessage,
 )
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.runtime import Runtime
 
 from CateringAiSystem.Agent.memory import AgentMemory
 
@@ -55,41 +59,34 @@ class ChatMemoryMiddleware(AgentMiddleware):
         llm: BaseChatModel,
         max_chat_round: int = 20,
         max_tokens: int = 5000,
-        keep_rounds = 10,
+        keep_rounds: int = 10,
     ):
+        super().__init__()
         self.llm = llm
         self.max_chat_round = max_chat_round
         self.max_tokens = max_tokens
         self.keep_rounds = keep_rounds
 
-    async def __call__(
-        self,
-        state: AgentState,
-        next: Callable[[AgentState], Any],
-    ) -> AgentState:
-        # 从 contextvars 获取当前会话（支持全局单例 Agent）
+    async def abefore_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        """模型调用前检查消息数/token数，超出则触发 AI 摘要压缩"""
         session_id = get_session_id()
+        messages: list[BaseMessage] = state.get("messages", [])
 
-        messages: List[BaseMessage] = state.get("messages", [])
-
-        # 1. 拆分消息：系统、工具、普通对话
-        sys_msgs = [m for m in messages if isinstance(m, SystemMessage)]
-        tool_msgs = [m for m in messages if isinstance(m, ToolMessage)]
+        # 只对 HumanMessage/AIMessage 计算对话轮次
         chat_msgs = [m for m in messages if isinstance(m, (HumanMessage, AIMessage))]
 
-        # 2. 计算是否超过阈值
-        total_chars = sum(len(m.content) for m in chat_msgs if m.content)
+        total_chars = sum(len(m.content or "") for m in chat_msgs if m.content)
         exceed_round = len(chat_msgs) > self.max_chat_round
         exceed_tokens = total_chars > self.max_tokens
 
         if not exceed_round and not exceed_tokens:
-            return await next(state)
+            return None
 
-        # 3. 分割：早期需要摘要的 + 近期保留的
+        # 分割：早期需要摘要的 + 近期保留的
         need_summary = chat_msgs[:-self.keep_rounds]
         keep_latest = chat_msgs[-self.keep_rounds:]
 
-        # 4. LLM 对早期对话做智能摘要
+        # LLM 对早期对话做智能摘要
         formatted = self._format_msgs(need_summary)
         summary_prompt = (
             f"请简洁总结以下多轮对话的核心内容、关键信息和重要约定，精简但不要丢失重要信息：\n"
@@ -100,11 +97,9 @@ class ChatMemoryMiddleware(AgentMiddleware):
             summary_text = summary_resp.content if hasattr(summary_resp, "content") else str(summary_resp)
         except Exception as e:
             logger.warning(f"记忆摘要生成失败，跳过压缩: {e}")
-            return await next(state)
+            return None
 
-        summary_msg = AIMessage(content=f"【历史对话摘要】:{summary_text}")
-
-        # 5. 持久化摘要到 Redis + MySQL
+        # 持久化摘要到 Redis + MySQL
         try:
             await AgentMemory.compress_and_save(
                 session_id=session_id,
@@ -114,17 +109,34 @@ class ChatMemoryMiddleware(AgentMiddleware):
         except Exception as e:
             logger.warning(f"摘要持久化失败: {e}")
 
-        # 6. 重新拼接: 系统 + 摘要 + 近期原话 + 工具消息
-        new_messages = sys_msgs + [summary_msg] + keep_latest + tool_msgs
-        state["messages"] = new_messages
+        # 构建新消息列表：系统 + 摘要 + 近期 + 工具
+        sys_msgs = [m for m in messages if isinstance(m, SystemMessage)]
+        tool_msgs = [m for m in messages if isinstance(m, ToolMessage)]
+        summary_msg = SystemMessage(content=f"【历史对话摘要】\n{summary_text}")
+
+        # 确保每条消息都有 ID（add_messages reducer 需要）
+        new_messages: list[BaseMessage] = [summary_msg, *keep_latest, *tool_msgs]
+        for m in sys_msgs + new_messages:
+            if m.id is None:
+                m.id = str(uuid.uuid4())
 
         logger.info(
             f"记忆压缩完成 | session={session_id} "
+            f"压缩 {len(need_summary)} 轮 → 摘要，保留 {len(keep_latest)} 轮"
         )
-        return await next(state)
+
+        return {
+            "messages": [
+                RemoveMessage(id=REMOVE_ALL_MESSAGES),
+                *sys_msgs,
+                summary_msg,
+                *keep_latest,
+                *tool_msgs,
+            ]
+        }
 
     @staticmethod
-    def _format_msgs(msgs: List[BaseMessage]) -> str:
+    def _format_msgs(msgs: list[BaseMessage]) -> str:
         lines = []
         for m in msgs:
             role = "用户" if isinstance(m, HumanMessage) else "AI"

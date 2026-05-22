@@ -314,7 +314,7 @@ class AgentMemory:
             messages.append(SystemMessage(content=f"【历史对话摘要】\n{summary_text}"))
 
         if redis_msgs:
-            for m in redis_msgs[-max_recent * 2:]:
+            for m in redis_msgs:
                 if m["role"] == "user":
                     messages.append(HumanMessage(content=m["content"]))
                 elif m["role"] == "assistant":
@@ -324,7 +324,7 @@ class AgentMemory:
 
     @classmethod
     async def compress_and_save(
-            cls, session_id: str, summary_text: str, keep_rounds: int = 10,
+            cls, session_id: str, summary_text: str, keep_rounds: int = 6,
     ):
         """压缩记忆：更新 Redis + MySQL 摘要，截断消息列表"""
         await cls.save_summary_to_redis(session_id, summary_text)
