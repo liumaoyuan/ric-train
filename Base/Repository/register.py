@@ -1,6 +1,7 @@
 from Base.Config.setting import settings
 from Base.Repository.base.baseDBModel import BaseDBModel
 from Base.Repository.connections.mysqlConnection import MySQLConnection
+from Base.Repository.connections.asyncMySQLConnection import AsyncMySQLConnection
 from Base.Repository.base.connectionManager import ConnectionManager
 import logging
 
@@ -46,3 +47,41 @@ def register_base_module_connection():
         logger.info(f"基础模块数据库连接注册成功 - host: {settings.mysql.host}, port: {settings.mysql.port}, database: {settings.base_module.db_name}, user: {settings.mysql.user}")
     except Exception as e:
         logger.warning(f"注册基础模块数据库连接失败，相关功能将无法持久化：{str(e)}")
+
+
+def register_async_connections():
+    """注册异步数据库连接，如果连接失败则记录日志但不影响程序运行"""
+    try:
+        async_default = AsyncMySQLConnection(
+            host=settings.mysql.host,
+            user=settings.mysql.user,
+            password=settings.mysql.password,
+            database=settings.mysql.name,
+            port=settings.mysql.port,
+            charset="utf8mb4",
+            mincached=2,
+            maxcached=10,
+            maxconnections=20,
+        )
+        ConnectionManager.register(key='async_default', db_connection=async_default)
+        BaseDBModel.set_default_async_db_connection(async_default)
+        logger.info(f"默认异步数据库连接注册成功 - host: {settings.mysql.host}, port: {settings.mysql.port}, database: {settings.mysql.name}, user: {settings.mysql.user}")
+    except Exception as e:
+        logger.warning(f"注册默认异步数据库连接失败：{str(e)}")
+
+    try:
+        async_base_module = AsyncMySQLConnection(
+            host=settings.mysql.host,
+            user=settings.mysql.user,
+            password=settings.mysql.password,
+            database=settings.base_module.db_name,
+            port=settings.mysql.port,
+            charset="utf8mb4",
+            mincached=2,
+            maxcached=10,
+            maxconnections=20,
+        )
+        ConnectionManager.register(key='async_base_module', db_connection=async_base_module)
+        logger.info(f"基础模块异步数据库连接注册成功 - host: {settings.mysql.host}, port: {settings.mysql.port}, database: {settings.base_module.db_name}, user: {settings.mysql.user}")
+    except Exception as e:
+        logger.warning(f"注册基础模块异步数据库连接失败：{str(e)}")

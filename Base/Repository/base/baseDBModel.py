@@ -84,6 +84,13 @@ class BaseDBModel(BaseModel, ABC):
     _instance_db_connection: Optional[BaseConnection] = None
     # 类变量：表检查缓存（避免重复检查）
     _table_checked: ClassVar[bool] = False
+    # ---- 异步连接字段 ----
+    # 类变量：默认异步数据库连接（全局默认）
+    _default_async_db_connection: ClassVar[Optional[BaseConnection]] = None
+    # 类变量：每个类可以有自己的异步连接
+    _async_db_connection: ClassVar[Optional[BaseConnection]] = None
+    # 实例变量：实例级别的异步连接（优先级最高）
+    _instance_async_db_connection: Optional[BaseConnection] = None
 
     # 抽象属性：主键字段（子类可以覆盖此属性以自定义类型或描述）
     # 注意：id 字段在基类中已定义，子类可以覆盖此字段以自定义类型或验证规则
@@ -130,6 +137,25 @@ class BaseDBModel(BaseModel, ABC):
         """为实例设置数据库连接（支持读写分离等场景，优先级最高）"""
         self._instance_db_connection = db_connection
         logger.debug(f"为 {self.__class__.__name__} 实例设置数据库连接")
+
+    # ---- 异步连接 setter ----
+
+    @classmethod
+    def set_default_async_db_connection(cls, db_connection: BaseConnection):
+        """设置全局默认异步数据库连接"""
+        cls._default_async_db_connection = db_connection
+        logger.debug("设置全局默认异步数据库连接")
+
+    @classmethod
+    def set_async_db_connection(cls, db_connection: BaseConnection):
+        """为特定模型类设置异步数据库连接"""
+        cls._async_db_connection = db_connection
+        logger.debug(f"为 {cls.__name__} 设置异步数据库连接")
+
+    def set_async_connection(self, db_connection: BaseConnection):
+        """为实例设置异步数据库连接（优先级最高）"""
+        self._instance_async_db_connection = db_connection
+        logger.debug(f"为 {self.__class__.__name__} 实例设置异步数据库连接")
 
     def get_connection(self) -> Optional[BaseConnection]:
         """获取数据库连接（优先级：实例 > 类 > 默认），如果未设置则返回 None"""
@@ -178,6 +204,49 @@ class BaseDBModel(BaseModel, ABC):
             return cls._default_db_connection
         # 返回 None 而不是抛出异常
         logger.warning(f"数据库连接未设置，操作将被跳过")
+        return None
+
+    # ---- 异步连接 getter ----
+
+    @classmethod
+    async def aget_db_connection(cls) -> Optional[BaseConnection]:
+        """获取异步数据库连接（优先级：类 > 默认），如果未设置则返回 None"""
+        if cls._async_db_connection is not None:
+            if hasattr(cls._async_db_connection,
+                       'is_available') and not cls._async_db_connection.is_available():
+                logger.debug(f"类级别的异步数据库连接不可用，操作将被跳过")
+                return None
+            return cls._async_db_connection
+        if cls._default_async_db_connection is not None:
+            if hasattr(cls._default_async_db_connection,
+                       'is_available') and not cls._default_async_db_connection.is_available():
+                logger.debug(f"全局默认异步数据库连接不可用，操作将被跳过")
+                return None
+            return cls._default_async_db_connection
+        logger.warning(f"异步数据库连接未设置，操作将被跳过")
+        return None
+
+    async def aget_connection(self) -> Optional[BaseConnection]:
+        """获取异步数据库连接（优先级：实例 > 类 > 默认），如果未设置则返回 None"""
+        if self._instance_async_db_connection is not None:
+            if hasattr(self._instance_async_db_connection,
+                       'is_available') and not self._instance_async_db_connection.is_available():
+                logger.debug(f"实例级别的异步数据库连接不可用，操作将被跳过")
+                return None
+            return self._instance_async_db_connection
+        if self.__class__._async_db_connection is not None:
+            if hasattr(self.__class__._async_db_connection,
+                       'is_available') and not self.__class__._async_db_connection.is_available():
+                logger.debug(f"类级别的异步数据库连接不可用，操作将被跳过")
+                return None
+            return self.__class__._async_db_connection
+        if self.__class__._default_async_db_connection is not None:
+            if hasattr(self.__class__._default_async_db_connection,
+                       'is_available') and not self.__class__._default_async_db_connection.is_available():
+                logger.debug(f"全局默认异步数据库连接不可用，操作将被跳过")
+                return None
+            return self.__class__._default_async_db_connection
+        logger.warning(f"异步数据库连接未设置，操作将被跳过")
         return None
 
     @classmethod
@@ -754,7 +823,7 @@ class BaseDBModel(BaseModel, ABC):
 
     # =================================================================
     # 异步方法（Async Methods）— 以 a 前缀命名，不影响原有同步方法
-    # 内部调用其他异步方法时优先使用对应的 a 前缀版本
+    # 使用 aget_db_connection() / aget_connection() 获取异步连接
     # =================================================================
 
     @classmethod
@@ -762,9 +831,9 @@ class BaseDBModel(BaseModel, ABC):
         """异步根据ID查询记录"""
         try:
             await cls._aensure_table_exists()
-            db = cls.get_db_connection()
+            db = await cls.aget_db_connection()
             if db is None:
-                logger.warning(f"{cls.__name__}.aget_by_id({id_val}) 失败：数据库连接未设置")
+                logger.warning(f"{cls.__name__}.aget_by_id({id_val}) 失败：异步数据库连接未设置")
                 return None
             table_name = cls.get_table_name_with_db()
             sql = f"SELECT * FROM {table_name} WHERE id = %s"
@@ -782,9 +851,9 @@ class BaseDBModel(BaseModel, ABC):
         """异步查询所有记录，支持排序和分页"""
         try:
             await cls._aensure_table_exists()
-            db = cls.get_db_connection()
+            db = await cls.aget_db_connection()
             if db is None:
-                logger.warning(f"{cls.__name__}.aget_all() 失败：数据库连接未设置")
+                logger.warning(f"{cls.__name__}.aget_all() 失败：异步数据库连接未设置")
                 return []
             table_name = cls.get_table_name_with_db()
             sql = f"SELECT * FROM {table_name}"
@@ -806,9 +875,9 @@ class BaseDBModel(BaseModel, ABC):
             return await cls.aget_all(limit=limit, offset=offset, order_by=order_by, order=order)
         try:
             await cls._aensure_table_exists()
-            db = cls.get_db_connection()
+            db = await cls.aget_db_connection()
             if db is None:
-                logger.warning(f"{cls.__name__}.afind_by({filters}) 失败：数据库连接未设置")
+                logger.warning(f"{cls.__name__}.afind_by({filters}) 失败：异步数据库连接未设置")
                 return []
             table_name = cls.get_table_name_with_db()
             where_clauses = []
@@ -849,9 +918,9 @@ class BaseDBModel(BaseModel, ABC):
 
     async def _ainsert(self) -> int:
         """异步插入记录，返回新插入的ID"""
-        db = self.get_connection()
+        db = await self.aget_connection()
         if db is None:
-            logger.warning(f"{self.__class__.__name__}._ainsert() 失败：数据库连接未设置")
+            logger.warning(f"{self.__class__.__name__}._ainsert() 失败：异步数据库连接未设置")
             return -1
         table_name = self.get_table_name_with_db()
         data = self.model_dump(exclude_none=True, exclude={'id'})
@@ -871,9 +940,9 @@ class BaseDBModel(BaseModel, ABC):
 
     async def _aupdate(self) -> bool:
         """异步更新记录，返回是否成功"""
-        db = self.get_connection()
+        db = await self.aget_connection()
         if db is None:
-            logger.warning(f"{self.__class__.__name__}._aupdate() 失败：数据库连接未设置")
+            logger.warning(f"{self.__class__.__name__}._aupdate() 失败：异步数据库连接未设置")
             return False
         table_name = self.get_table_name_with_db()
         data = self.model_dump(exclude_none=True, exclude={'id'})
@@ -906,9 +975,9 @@ class BaseDBModel(BaseModel, ABC):
             return False
         try:
             await self.__class__._aensure_table_exists()
-            db = self.get_connection()
+            db = await self.aget_connection()
             if db is None:
-                logger.warning(f"{self.__class__.__name__}.adelete() 失败：数据库连接未设置")
+                logger.warning(f"{self.__class__.__name__}.adelete() 失败：异步数据库连接未设置")
                 return False
             table_name = self.get_table_name_with_db()
             sql = f"DELETE FROM {table_name} WHERE id = %s"
@@ -923,9 +992,9 @@ class BaseDBModel(BaseModel, ABC):
         """异步根据ID删除记录"""
         try:
             await cls._aensure_table_exists()
-            db = cls.get_db_connection()
+            db = await cls.aget_db_connection()
             if db is None:
-                logger.warning(f"{cls.__name__}.adelete_by_id({id_val}) 失败：数据库连接未设置")
+                logger.warning(f"{cls.__name__}.adelete_by_id({id_val}) 失败：异步数据库连接未设置")
                 return False
             table_name = cls.get_table_name_with_db()
             sql = f"DELETE FROM {table_name} WHERE id = %s"
@@ -943,9 +1012,9 @@ class BaseDBModel(BaseModel, ABC):
             return []
         try:
             await cls._aensure_table_exists()
-            db = cls.get_db_connection()
+            db = await cls.aget_db_connection()
             if db is None:
-                logger.warning(f"{cls.__name__}.abulk_insert() 失败：数据库连接未设置")
+                logger.warning(f"{cls.__name__}.abulk_insert() 失败：异步数据库连接未设置")
                 return []
             table_name = cls.get_table_name_with_db()
             all_fields = set()
@@ -1006,9 +1075,9 @@ class BaseDBModel(BaseModel, ABC):
         """异步查询记录总数"""
         try:
             await cls._aensure_table_exists()
-            db = cls.get_db_connection()
+            db = await cls.aget_db_connection()
             if db is None:
-                logger.warning(f"{cls.__name__}.acount() 失败：数据库连接未设置")
+                logger.warning(f"{cls.__name__}.acount() 失败：异步数据库连接未设置")
                 return 0
             table_name = cls.get_table_name_with_db()
             sql = f"SELECT COUNT(*) as count FROM {table_name}"
@@ -1021,9 +1090,9 @@ class BaseDBModel(BaseModel, ABC):
     @classmethod
     async def atable_exists(cls) -> bool:
         """异步检查表是否存在"""
-        db = cls.get_db_connection()
+        db = await cls.aget_db_connection()
         if db is None:
-            logger.warning(f"检查表 {cls.get_table_name()} 是否存在失败：数据库连接未设置")
+            logger.warning(f"检查表 {cls.get_table_name()} 是否存在失败：异步数据库连接未设置")
             return False
         table_name = cls.get_table_name()
         db_type = db.config.get("type", "mysql").lower()
@@ -1049,9 +1118,9 @@ class BaseDBModel(BaseModel, ABC):
     @classmethod
     async def acreate_table(cls) -> bool:
         """异步创建表，返回是否成功"""
-        db = cls.get_db_connection()
+        db = await cls.aget_db_connection()
         if db is None:
-            logger.warning(f"创建表 {cls.get_table_name()} 失败：数据库连接未设置")
+            logger.warning(f"创建表 {cls.get_table_name()} 失败：异步数据库连接未设置")
             return False
         sql = cls.get_create_table_sql()
         if sql is None:
