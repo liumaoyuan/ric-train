@@ -1,29 +1,13 @@
-import asyncio
 import logging
 from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar, Literal
 from abc import ABC, abstractproperty
 from pydantic import BaseModel, Field, ConfigDict
 
 from Base.Repository.base.baseConnection import BaseConnection
+from Base.Repository.connections.asyncMySQLConnection import AsyncMySQLConnection
 
 logger = logging.getLogger(__name__)
 T = TypeVar('T', bound='BaseDBModel')
-
-
-async def _aexecute(
-    db,
-    sql: str,
-    params: Optional[tuple] = None,
-    operation_type: Optional[str] = None,
-    commit: bool = True
-):
-    """
-    异步执行数据库操作
-    优先使用连接的原生异步方法（aexecute），否则使用 asyncio.to_thread 包装同步方法
-    """
-    if hasattr(db, 'aexecute') and callable(getattr(db, 'aexecute')):
-        return await db.aexecute(sql, params, operation_type, commit)
-    return await asyncio.to_thread(db.execute, sql, params, operation_type, commit)
 
 
 class BaseDBModel(BaseModel, ABC):
@@ -86,11 +70,11 @@ class BaseDBModel(BaseModel, ABC):
     _table_checked: ClassVar[bool] = False
     # ---- 异步连接字段 ----
     # 类变量：默认异步数据库连接（全局默认）
-    _default_async_db_connection: ClassVar[Optional[BaseConnection]] = None
+    _default_async_db_connection: ClassVar[Optional[AsyncMySQLConnection]] = None
     # 类变量：每个类可以有自己的异步连接
-    _async_db_connection: ClassVar[Optional[BaseConnection]] = None
+    _async_db_connection: ClassVar[Optional[AsyncMySQLConnection]] = None
     # 实例变量：实例级别的异步连接（优先级最高）
-    _instance_async_db_connection: Optional[BaseConnection] = None
+    _instance_async_db_connection: Optional[AsyncMySQLConnection] = None
 
     # 抽象属性：主键字段（子类可以覆盖此属性以自定义类型或描述）
     # 注意：id 字段在基类中已定义，子类可以覆盖此字段以自定义类型或验证规则
@@ -209,7 +193,7 @@ class BaseDBModel(BaseModel, ABC):
     # ---- 异步连接 getter ----
 
     @classmethod
-    async def aget_db_connection(cls) -> Optional[BaseConnection]:
+    async def aget_db_connection(cls) -> Optional[AsyncMySQLConnection]:
         """获取异步数据库连接（优先级：类 > 默认），如果未设置则返回 None"""
         if cls._async_db_connection is not None:
             if hasattr(cls._async_db_connection,
@@ -226,7 +210,7 @@ class BaseDBModel(BaseModel, ABC):
         logger.warning(f"异步数据库连接未设置，操作将被跳过")
         return None
 
-    async def aget_connection(self) -> Optional[BaseConnection]:
+    async def aget_connection(self) -> Optional[AsyncMySQLConnection]:
         """获取异步数据库连接（优先级：实例 > 类 > 默认），如果未设置则返回 None"""
         if self._instance_async_db_connection is not None:
             if hasattr(self._instance_async_db_connection,
@@ -837,7 +821,7 @@ class BaseDBModel(BaseModel, ABC):
                 return None
             table_name = cls.get_table_name_with_db()
             sql = f"SELECT * FROM {table_name} WHERE id = %s"
-            result = await _aexecute(db, sql, (id_val,))
+            result = await db.aexecute(sql, (id_val,))
             if not result:
                 return None
             return cls(**result[0])
@@ -861,7 +845,7 @@ class BaseDBModel(BaseModel, ABC):
                 sql += f" ORDER BY `{order_by}` {order}"
             if limit is not None:
                 sql += f" LIMIT {offset}, {limit}"
-            results = await _aexecute(db, sql)
+            results = await db.aexecute(sql)
             return [cls(**row) for row in results]
         except Exception as e:
             logger.error(f"{cls.__name__}.aget_all() 失败：{str(e)}")
@@ -890,7 +874,7 @@ class BaseDBModel(BaseModel, ABC):
                 sql += f" ORDER BY `{order_by}` {order}"
             if limit is not None:
                 sql += f" LIMIT {offset}, {limit}"
-            results = await _aexecute(db, sql, tuple(params))
+            results = await db.aexecute(sql, tuple(params))
             return [cls(**row) for row in results]
         except Exception as e:
             logger.error(
@@ -932,7 +916,7 @@ class BaseDBModel(BaseModel, ABC):
             placeholders = ",".join(["%s"] * len(keys))
             quoted_keys = [f"`{k}`" for k in keys]
             sql = f"INSERT INTO {table_name} ({','.join(quoted_keys)}) VALUES ({placeholders})"
-            self.id = await _aexecute(db, sql, tuple(data[k] for k in keys))
+            self.id = await db.aexecute(sql, tuple(data[k] for k in keys))
             return self.id
         except Exception as e:
             logger.error(f"{self.__class__.__name__}._ainsert() 失败：{str(e)}")
@@ -951,7 +935,7 @@ class BaseDBModel(BaseModel, ABC):
         try:
             sets = ",".join([f"`{k}`=%s" for k in data])
             sql = f"UPDATE {table_name} SET {sets} WHERE id = %s"
-            affected = await _aexecute(db, sql, tuple(data.values()) + (self.id,))
+            affected = await db.aexecute(sql, tuple(data.values()) + (self.id,))
             return affected > 0
         except Exception as e:
             logger.error(f"{self.__class__.__name__}._aupdate() 失败：{str(e)}")
@@ -981,7 +965,7 @@ class BaseDBModel(BaseModel, ABC):
                 return False
             table_name = self.get_table_name_with_db()
             sql = f"DELETE FROM {table_name} WHERE id = %s"
-            affected = await _aexecute(db, sql, (self.id,))
+            affected = await db.aexecute(sql, (self.id,))
             return affected > 0
         except Exception as e:
             logger.error(f"{self.__class__.__name__}.adelete() 失败：{str(e)}")
@@ -998,7 +982,7 @@ class BaseDBModel(BaseModel, ABC):
                 return False
             table_name = cls.get_table_name_with_db()
             sql = f"DELETE FROM {table_name} WHERE id = %s"
-            affected = await _aexecute(db, sql, (id_val,))
+            affected = await db.aexecute(sql, (id_val,))
             return affected > 0
         except Exception as e:
             logger.error(f"{cls.__name__}.adelete_by_id({id_val}) 失败：{str(e)}")
@@ -1040,13 +1024,13 @@ class BaseDBModel(BaseModel, ABC):
                 params = [item for row in batch_data for item in row]
                 try:
                     batch_size_actual = len(batch_data)
-                    await _aexecute(db, sql, tuple(params), commit=True)
+                    await db.aexecute(sql, tuple(params), commit=True)
                     logger.info(f"批量插入SQL执行成功，本批 {batch_size_actual} 条")
                     db_config = getattr(db, 'config', {})
                     logger.debug(f"数据库配置: {db_config}, type类型: {db_config.get('type', 'mysql')}")
                     if hasattr(db, 'config') and db.config.get("type", "mysql").lower() == "mysql":
                         logger.info("检测到MySQL数据库，尝试获取插入ID")
-                        result = await _aexecute(db, "SELECT LAST_INSERT_ID() as last_id")
+                        result = await db.aexecute("SELECT LAST_INSERT_ID() as last_id")
                         logger.info(f"LAST_INSERT_ID() 查询结果: {result}")
                         if result and result[0]:
                             last_id = int(result[0]['last_id'])
@@ -1081,7 +1065,7 @@ class BaseDBModel(BaseModel, ABC):
                 return 0
             table_name = cls.get_table_name_with_db()
             sql = f"SELECT COUNT(*) as count FROM {table_name}"
-            result = await _aexecute(db, sql)
+            result = await db.aexecute(sql)
             return result[0]['count'] if result else 0
         except Exception as e:
             logger.error(f"{cls.__name__}.acount() 失败：{str(e)}")
@@ -1099,17 +1083,17 @@ class BaseDBModel(BaseModel, ABC):
         try:
             if db_type == "sqlite":
                 sql = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = %s"
-                result = await _aexecute(db, sql, (table_name,))
+                result = await db.aexecute(sql, (table_name,))
             elif db_type == "postgresql":
                 sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s"
-                result = await _aexecute(db, sql, (table_name,))
+                result = await db.aexecute(sql, (table_name,))
             else:
                 database = db.config.get("database")
                 if database is None:
                     logger.warning(f"检查表 {table_name} 是否存在失败：MySQL 配置中缺少 database 参数")
                     return False
                 sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = %s AND table_name = %s"
-                result = await _aexecute(db, sql, (database, table_name))
+                result = await db.aexecute(sql, (database, table_name))
             return len(result) > 0
         except Exception as e:
             logger.error(f"检查表 {table_name} 是否存在失败：{str(e)}")
@@ -1126,7 +1110,7 @@ class BaseDBModel(BaseModel, ABC):
         if sql is None:
             return False
         try:
-            res = await _aexecute(db, sql, commit=True)
+            res = await db.aexecute(sql, commit=True)
             if res >= 0:
                 logger.info(f"表 {cls.get_table_name()} 创建成功")
                 return True
