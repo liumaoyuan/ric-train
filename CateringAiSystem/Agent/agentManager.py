@@ -101,6 +101,7 @@ class ChatAgent:
                     llm=llm_models.get_deepseek(),
                     max_chat_round=20,
                     max_tokens=5000,
+                    keep_rounds=6,
                 ),
             ],
         )
@@ -116,18 +117,14 @@ class ChatAgent:
 
         # 加载历史记忆作为消息前缀
         memory_msgs, _ = await AgentMemory.build_memory_messages(
-            session_id=session_id, user_id=user_id, max_recent=20,
+            session_id=session_id, user_id=user_id, max_recent=10,
         )
         input_messages = memory_msgs + [HumanMessage(content=question)]
-
-        # config = {"configurable": {"thread_id": session_id}}
 
         try:
             full_content = ""
             async for event in self._agent.astream_events(
                 {"messages": input_messages},
-                # config=config,
-                # version="v1",
             ):
                 kind = event["event"]
 

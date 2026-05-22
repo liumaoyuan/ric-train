@@ -55,10 +55,12 @@ class ChatMemoryMiddleware(AgentMiddleware):
         llm: BaseChatModel,
         max_chat_round: int = 20,
         max_tokens: int = 5000,
+        keep_rounds = 10,
     ):
         self.llm = llm
         self.max_chat_round = max_chat_round
         self.max_tokens = max_tokens
+        self.keep_rounds = keep_rounds
 
     async def __call__(
         self,
@@ -84,9 +86,8 @@ class ChatMemoryMiddleware(AgentMiddleware):
             return await next(state)
 
         # 3. 分割：早期需要摘要的 + 近期保留的
-        keep_count = self.max_chat_round
-        need_summary = chat_msgs[:-keep_count]
-        keep_latest = chat_msgs[-keep_count:]
+        need_summary = chat_msgs[:-self.keep_rounds]
+        keep_latest = chat_msgs[-self.keep_rounds:]
 
         # 4. LLM 对早期对话做智能摘要
         formatted = self._format_msgs(need_summary)
@@ -118,8 +119,7 @@ class ChatMemoryMiddleware(AgentMiddleware):
         state["messages"] = new_messages
 
         logger.info(
-            f"记忆压缩完成 | session={session_id[:8]} "
-            f"压缩前={len(chat_msgs)}轮 压缩后={len(keep_latest)}轮"
+            f"记忆压缩完成 | session={session_id} "
         )
         return await next(state)
 
