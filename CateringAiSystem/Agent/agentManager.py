@@ -99,9 +99,9 @@ class ChatAgent:
             middleware=[
                 ChatMemoryMiddleware(
                     llm=llm_models.get_deepseek(),
-                    max_chat_round=20,
+                    max_chat_round=30,
                     max_tokens=5000,
-                    keep_rounds=6,
+                    keep_rounds=10,
                 ),
             ],
         )

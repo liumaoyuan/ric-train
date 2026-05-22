@@ -3,7 +3,7 @@
 工作流：
   1. Agent 执行前：从 Redis 加载短期记忆（Redis 空则回退 MySQL）
   2. Agent 执行后：将新对话追加到 Redis
-  3. 检查是否超过最大轮数或 token 数 → 触发 AI 摘要压缩
+  3. 检查是否超过最大条数或 token 数 → 触发 AI 摘要压缩
   4. 压缩后更新 Redis + MySQL 摘要，截断消息列表
 """
 import contextvars
@@ -48,7 +48,7 @@ class ChatMemoryMiddleware(AgentMiddleware):
     """
     自定义对话记忆压缩中间件
 
-    在消息超过阈值时自动对早期对话做 AI 摘要保留最近 N 轮完整对话。
+    在消息超过阈值时自动对早期对话做 AI 摘要保留最近 N 条完整对话。
     同时负责在 agent 执行前后与 Redis + MySQL 同步记忆。
 
     session_id / user_id 通过 contextvars 动态获取，支持全局单例 Agent。
@@ -57,7 +57,7 @@ class ChatMemoryMiddleware(AgentMiddleware):
     def __init__(
         self,
         llm: BaseChatModel,
-        max_chat_round: int = 20,
+        max_chat_round: int = 30,
         max_tokens: int = 5000,
         keep_rounds: int = 10,
     ):
@@ -104,7 +104,7 @@ class ChatMemoryMiddleware(AgentMiddleware):
             await AgentMemory.compress_and_save(
                 session_id=session_id,
                 summary_text=summary_text,
-                keep_rounds=self.max_chat_round,
+                keep_rounds=self.keep_rounds,
             )
         except Exception as e:
             logger.warning(f"摘要持久化失败: {e}")

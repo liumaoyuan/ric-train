@@ -189,15 +189,15 @@ class AgentMemory:
 
     @staticmethod
     async def trim_redis_memory(session_id: str, keep_rounds: int):
-        """截断 Redis 消息列表，只保留最近 keep_rounds 轮对话"""
+        """截断 Redis 消息列表，只保留最近 keep_rounds 条对话"""
         redis_conn = await _get_redis()
         if not redis_conn:
             return
         key = f"{MEMORY_KEY_PREFIX}{session_id}"
         try:
             current_len = await redis_conn.llen(key)
-            if current_len > keep_rounds * 2:
-                await redis_conn.ltrim(key, -(keep_rounds * 2), -1)
+            if current_len > keep_rounds:
+                await redis_conn.ltrim(key, -(keep_rounds), -1)
         except Exception as e:
             logger.warning(f"Redis 截断失败: {e}")
 
@@ -324,7 +324,7 @@ class AgentMemory:
 
     @classmethod
     async def compress_and_save(
-            cls, session_id: str, summary_text: str, keep_rounds: int = 6,
+            cls, session_id: str, summary_text: str, keep_rounds: int = 10,
     ):
         """压缩记忆：更新 Redis + MySQL 摘要，截断消息列表"""
         await cls.save_summary_to_redis(session_id, summary_text)
