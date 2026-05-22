@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Optional, Dict, Any, List, Type, TypeVar, ClassVar, Literal
 from abc import ABC, abstractproperty
@@ -7,6 +8,22 @@ from Base.Repository.base.baseConnection import BaseConnection
 
 logger = logging.getLogger(__name__)
 T = TypeVar('T', bound='BaseDBModel')
+
+
+async def _aexecute(
+    db,
+    sql: str,
+    params: Optional[tuple] = None,
+    operation_type: Optional[str] = None,
+    commit: bool = True
+):
+    """
+    异步执行数据库操作
+    优先使用连接的原生异步方法（aexecute），否则使用 asyncio.to_thread 包装同步方法
+    """
+    if hasattr(db, 'aexecute') and callable(getattr(db, 'aexecute')):
+        return await db.aexecute(sql, params, operation_type, commit)
+    return await asyncio.to_thread(db.execute, sql, params, operation_type, commit)
 
 
 class BaseDBModel(BaseModel, ABC):
@@ -734,3 +751,332 @@ class BaseDBModel(BaseModel, ABC):
         except Exception as e:
             logger.error(f"{cls.__name__}.count() 失败：{str(e)}")
             return 0
+
+    # =================================================================
+    # 异步方法（Async Methods）— 以 a 前缀命名，不影响原有同步方法
+    # 内部调用其他异步方法时优先使用对应的 a 前缀版本
+    # =================================================================
+
+    @classmethod
+    async def aget_by_id(cls: Type[T], id_val: int) -> Optional[T]:
+        """异步根据ID查询记录"""
+        try:
+            await cls._aensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.aget_by_id({id_val}) 失败：数据库连接未设置")
+                return None
+            table_name = cls.get_table_name_with_db()
+            sql = f"SELECT * FROM {table_name} WHERE id = %s"
+            result = await _aexecute(db, sql, (id_val,))
+            if not result:
+                return None
+            return cls(**result[0])
+        except Exception as e:
+            logger.error(f"{cls.__name__}.aget_by_id({id_val}) 失败：{str(e)}")
+            return None
+
+    @classmethod
+    async def aget_all(cls: Type[T], limit: Optional[int] = None, offset: int = 0,
+                        order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC') -> List[T]:
+        """异步查询所有记录，支持排序和分页"""
+        try:
+            await cls._aensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.aget_all() 失败：数据库连接未设置")
+                return []
+            table_name = cls.get_table_name_with_db()
+            sql = f"SELECT * FROM {table_name}"
+            if order_by is not None:
+                sql += f" ORDER BY `{order_by}` {order}"
+            if limit is not None:
+                sql += f" LIMIT {offset}, {limit}"
+            results = await _aexecute(db, sql)
+            return [cls(**row) for row in results]
+        except Exception as e:
+            logger.error(f"{cls.__name__}.aget_all() 失败：{str(e)}")
+            return []
+
+    @classmethod
+    async def afind_by(cls: Type[T], limit: Optional[int] = None, offset: int = 0,
+                        order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC', **filters) -> List[T]:
+        """异步根据条件查询记录，支持排序和分页"""
+        if not filters:
+            return await cls.aget_all(limit=limit, offset=offset, order_by=order_by, order=order)
+        try:
+            await cls._aensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.afind_by({filters}) 失败：数据库连接未设置")
+                return []
+            table_name = cls.get_table_name_with_db()
+            where_clauses = []
+            params = []
+            for key, value in filters.items():
+                where_clauses.append(f"`{key}` = %s")
+                params.append(value)
+            sql = f"SELECT * FROM {table_name} WHERE {' AND '.join(where_clauses)}"
+            if order_by is not None:
+                sql += f" ORDER BY `{order_by}` {order}"
+            if limit is not None:
+                sql += f" LIMIT {offset}, {limit}"
+            results = await _aexecute(db, sql, tuple(params))
+            return [cls(**row) for row in results]
+        except Exception as e:
+            logger.error(
+                f"{cls.__name__}.afind_by({filters}, limit={limit}, offset={offset}, order_by={order_by}, order={order}) 失败：{str(e)}")
+            return []
+
+    @classmethod
+    async def afind_one_by(cls: Type[T], order_by: Optional[str] = None, order: Literal['ASC', 'DESC'] = 'ASC', **filters) -> Optional[T]:
+        """异步根据条件查询单条记录（只返回第一条）"""
+        results = await cls.afind_by(limit=1, order_by=order_by, order=order, **filters)
+        return results[0] if results else None
+
+    async def asave(self) -> int:
+        """异步保存记录（插入或更新），返回ID"""
+        try:
+            await self.__class__._aensure_table_exists()
+            if self.id is None:
+                return await self._ainsert()
+            else:
+                await self._aupdate()
+                return self.id
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}.asave() 失败：{str(e)}")
+            return -1
+
+    async def _ainsert(self) -> int:
+        """异步插入记录，返回新插入的ID"""
+        db = self.get_connection()
+        if db is None:
+            logger.warning(f"{self.__class__.__name__}._ainsert() 失败：数据库连接未设置")
+            return -1
+        table_name = self.get_table_name_with_db()
+        data = self.model_dump(exclude_none=True, exclude={'id'})
+        if not data:
+            logger.warning(f"{self.__class__.__name__}._ainsert() 失败：没有可插入的数据")
+            return -1
+        try:
+            keys = list(data.keys())
+            placeholders = ",".join(["%s"] * len(keys))
+            quoted_keys = [f"`{k}`" for k in keys]
+            sql = f"INSERT INTO {table_name} ({','.join(quoted_keys)}) VALUES ({placeholders})"
+            self.id = await _aexecute(db, sql, tuple(data[k] for k in keys))
+            return self.id
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}._ainsert() 失败：{str(e)}")
+            return -1
+
+    async def _aupdate(self) -> bool:
+        """异步更新记录，返回是否成功"""
+        db = self.get_connection()
+        if db is None:
+            logger.warning(f"{self.__class__.__name__}._aupdate() 失败：数据库连接未设置")
+            return False
+        table_name = self.get_table_name_with_db()
+        data = self.model_dump(exclude_none=True, exclude={'id'})
+        if not data:
+            return True
+        try:
+            sets = ",".join([f"`{k}`=%s" for k in data])
+            sql = f"UPDATE {table_name} SET {sets} WHERE id = %s"
+            affected = await _aexecute(db, sql, tuple(data.values()) + (self.id,))
+            return affected > 0
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}._aupdate() 失败：{str(e)}")
+            return False
+
+    async def aupdate(self, **fields) -> bool:
+        """异步更新指定字段"""
+        try:
+            for key, value in fields.items():
+                if hasattr(self, key):
+                    setattr(self, key, value)
+            return await self._aupdate()
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}.aupdate({fields}) 失败：{str(e)}")
+            return False
+
+    async def adelete(self) -> bool:
+        """异步删除记录，返回是否成功"""
+        if self.id is None:
+            logger.warning(f"{self.__class__.__name__}.adelete() 失败：无法删除未保存的记录")
+            return False
+        try:
+            await self.__class__._aensure_table_exists()
+            db = self.get_connection()
+            if db is None:
+                logger.warning(f"{self.__class__.__name__}.adelete() 失败：数据库连接未设置")
+                return False
+            table_name = self.get_table_name_with_db()
+            sql = f"DELETE FROM {table_name} WHERE id = %s"
+            affected = await _aexecute(db, sql, (self.id,))
+            return affected > 0
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__}.adelete() 失败：{str(e)}")
+            return False
+
+    @classmethod
+    async def adelete_by_id(cls, id_val: int) -> bool:
+        """异步根据ID删除记录"""
+        try:
+            await cls._aensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.adelete_by_id({id_val}) 失败：数据库连接未设置")
+                return False
+            table_name = cls.get_table_name_with_db()
+            sql = f"DELETE FROM {table_name} WHERE id = %s"
+            affected = await _aexecute(db, sql, (id_val,))
+            return affected > 0
+        except Exception as e:
+            logger.error(f"{cls.__name__}.adelete_by_id({id_val}) 失败：{str(e)}")
+            return False
+
+    @classmethod
+    async def abulk_insert(cls, instances: List['BaseDBModel'], batch_size: int = 1000) -> List[int]:
+        """异步批量插入记录"""
+        if not instances:
+            logger.warning(f"{cls.__name__}.abulk_insert() 失败：实例列表为空")
+            return []
+        try:
+            await cls._aensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.abulk_insert() 失败：数据库连接未设置")
+                return []
+            table_name = cls.get_table_name_with_db()
+            all_fields = set()
+            for instance in instances:
+                data = instance.model_dump(exclude_none=True, exclude={'id'})
+                all_fields.update(data.keys())
+            if not all_fields:
+                logger.warning(f"{cls.__name__}.abulk_insert() 失败：没有可插入的数据")
+                return []
+            fields = list(all_fields)
+            quoted_fields = [f"`{f}`" for f in fields]
+            all_ids = []
+            total_instances = len(instances)
+            for i in range(0, total_instances, batch_size):
+                batch = instances[i:i + batch_size]
+                batch_data = []
+                for instance in batch:
+                    data = instance.model_dump(exclude_none=False, exclude={'id'})
+                    row_data = [data.get(field) for field in fields]
+                    batch_data.append(row_data)
+                placeholders = ",".join([f"({','.join(['%s'] * len(fields))})"] * len(batch_data))
+                sql = f"INSERT INTO {table_name} ({','.join(quoted_fields)}) VALUES {placeholders}"
+                params = [item for row in batch_data for item in row]
+                try:
+                    batch_size_actual = len(batch_data)
+                    await _aexecute(db, sql, tuple(params), commit=True)
+                    logger.info(f"批量插入SQL执行成功，本批 {batch_size_actual} 条")
+                    db_config = getattr(db, 'config', {})
+                    logger.debug(f"数据库配置: {db_config}, type类型: {db_config.get('type', 'mysql')}")
+                    if hasattr(db, 'config') and db.config.get("type", "mysql").lower() == "mysql":
+                        logger.info("检测到MySQL数据库，尝试获取插入ID")
+                        result = await _aexecute(db, "SELECT LAST_INSERT_ID() as last_id")
+                        logger.info(f"LAST_INSERT_ID() 查询结果: {result}")
+                        if result and result[0]:
+                            last_id = int(result[0]['last_id'])
+                            logger.info(f"last_id 值: {last_id}, 类型: {type(last_id)}")
+                            if last_id > 0:
+                                start_id = last_id - batch_size_actual + 1
+                                id_range = list(range(start_id, last_id + 1))
+                                all_ids.extend(id_range)
+                                logger.info(f"成功添加ID到列表: {id_range}, 当前all_ids长度: {len(all_ids)}")
+                    else:
+                        logger.warning(f"{cls.__name__}.abulk_insert() 批量插入成功，但当前数据库类型不支持返回 ID 列表")
+                    logger.info(
+                        f"{cls.__name__}.abulk_insert() 成功：第 {i // batch_size + 1} 批，"
+                        f"本批插入 {batch_size_actual} 条记录，累计插入 {len(all_ids) + batch_size_actual} 条"
+                    )
+                except Exception as e:
+                    logger.error(f"{cls.__name__}.abulk_insert() 批量插入失败（第 {i // batch_size + 1} 批）：{str(e)}")
+                    raise
+            return all_ids
+        except Exception as e:
+            logger.error(f"{cls.__name__}.abulk_insert() 失败：{str(e)}")
+            return []
+
+    @classmethod
+    async def acount(cls) -> int:
+        """异步查询记录总数"""
+        try:
+            await cls._aensure_table_exists()
+            db = cls.get_db_connection()
+            if db is None:
+                logger.warning(f"{cls.__name__}.acount() 失败：数据库连接未设置")
+                return 0
+            table_name = cls.get_table_name_with_db()
+            sql = f"SELECT COUNT(*) as count FROM {table_name}"
+            result = await _aexecute(db, sql)
+            return result[0]['count'] if result else 0
+        except Exception as e:
+            logger.error(f"{cls.__name__}.acount() 失败：{str(e)}")
+            return 0
+
+    @classmethod
+    async def atable_exists(cls) -> bool:
+        """异步检查表是否存在"""
+        db = cls.get_db_connection()
+        if db is None:
+            logger.warning(f"检查表 {cls.get_table_name()} 是否存在失败：数据库连接未设置")
+            return False
+        table_name = cls.get_table_name()
+        db_type = db.config.get("type", "mysql").lower()
+        try:
+            if db_type == "sqlite":
+                sql = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = %s"
+                result = await _aexecute(db, sql, (table_name,))
+            elif db_type == "postgresql":
+                sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s"
+                result = await _aexecute(db, sql, (table_name,))
+            else:
+                database = db.config.get("database")
+                if database is None:
+                    logger.warning(f"检查表 {table_name} 是否存在失败：MySQL 配置中缺少 database 参数")
+                    return False
+                sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = %s AND table_name = %s"
+                result = await _aexecute(db, sql, (database, table_name))
+            return len(result) > 0
+        except Exception as e:
+            logger.error(f"检查表 {table_name} 是否存在失败：{str(e)}")
+            return False
+
+    @classmethod
+    async def acreate_table(cls) -> bool:
+        """异步创建表，返回是否成功"""
+        db = cls.get_db_connection()
+        if db is None:
+            logger.warning(f"创建表 {cls.get_table_name()} 失败：数据库连接未设置")
+            return False
+        sql = cls.get_create_table_sql()
+        if sql is None:
+            return False
+        try:
+            res = await _aexecute(db, sql, commit=True)
+            if res >= 0:
+                logger.info(f"表 {cls.get_table_name()} 创建成功")
+                return True
+            else:
+                logger.error(f"表 {cls.get_table_name()} 创建失败")
+                return False
+        except Exception as e:
+            logger.error(f"创建表 {cls.get_table_name()} 失败：{str(e)}")
+            return False
+
+    @classmethod
+    async def _aensure_table_exists(cls) -> None:
+        """异步确保表存在，不存在则自动创建（与同步方法共享 _table_checked 缓存）"""
+        if cls._table_checked:
+            return
+        try:
+            if not await cls.atable_exists():
+                logger.info(f"表 {cls.get_table_name()} 不存在，开始创建...")
+                await cls.acreate_table()
+        except Exception as e:
+            logger.warning(f"检查或创建表 {cls.get_table_name()} 失败：{str(e)}")
+        cls._table_checked = True
