@@ -196,8 +196,8 @@ class AgentMemory:
         key = f"{MEMORY_KEY_PREFIX}{session_id}"
         try:
             current_len = await redis_conn.llen(key)
-            if current_len > keep_rounds:
-                await redis_conn.ltrim(key, -(keep_rounds), -1)
+            if current_len > keep_rounds * 2:
+                await redis_conn.ltrim(key, -(keep_rounds * 2), -1)
         except Exception as e:
             logger.warning(f"Redis 截断失败: {e}")
 
@@ -276,7 +276,7 @@ class AgentMemory:
 
     @classmethod
     async def build_memory_messages(
-            cls, session_id: str, user_id: str, max_recent: int = 20,
+            cls, session_id: str, user_id: str, keep_rounds: int = 5,
     ) -> Tuple[List[BaseMessage], str]:
         """构建记忆上下文消息列表
 
@@ -301,7 +301,7 @@ class AgentMemory:
             summary_text = redis_summary or ""
         else:
             # 2. Redis 空 → 从 MySQL 回退
-            mysql_msgs = cls.load_from_mysql(session_id, user_id, limit=max_recent)
+            mysql_msgs = cls.load_from_mysql(session_id, user_id, limit=keep_rounds)
             summary_text = cls.get_session_summary(session_id)
             if mysql_msgs:
                 await cls.push_to_redis(session_id, *[(m["role"], m["content"]) for m in mysql_msgs])
@@ -324,7 +324,7 @@ class AgentMemory:
 
     @classmethod
     async def compress_and_save(
-            cls, session_id: str, summary_text: str, keep_rounds: int = 10,
+            cls, session_id: str, summary_text: str, keep_rounds: int = 5,
     ):
         """压缩记忆：更新 Redis + MySQL 摘要，截断消息列表"""
         await cls.save_summary_to_redis(session_id, summary_text)

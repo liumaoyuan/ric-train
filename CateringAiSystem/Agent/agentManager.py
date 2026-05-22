@@ -10,7 +10,7 @@ import logging
 from typing import AsyncGenerator, List
 
 from langchain.agents import create_agent
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import RemoveMessage, HumanMessage
 
 from CateringAiSystem.Agent.memory import AgentMemory
 from CateringAiSystem.Agent.middleWare import ChatMemoryMiddleware, set_session_context
@@ -99,9 +99,9 @@ class ChatAgent:
             middleware=[
                 ChatMemoryMiddleware(
                     llm=llm_models.get_deepseek(),
-                    max_chat_round=30,
+                    max_chat_round=15,
                     max_tokens=5000,
-                    keep_rounds=10,
+                    keep_rounds=5,
                 ),
             ],
         )
@@ -117,7 +117,7 @@ class ChatAgent:
 
         # 加载历史记忆作为消息前缀
         memory_msgs, _ = await AgentMemory.build_memory_messages(
-            session_id=session_id, user_id=user_id, max_recent=10,
+            session_id=session_id, user_id=user_id, keep_rounds=5,
         )
         input_messages = memory_msgs + [HumanMessage(content=question)]
 
@@ -148,7 +148,8 @@ class ChatAgent:
                     output = event["data"]["output"]
                     if isinstance(output, dict) and "messages" in output:
                         msgs = output["messages"]
-                        if msgs:
+                        # 跳过中间件的状态更新（含 RemoveMessage），避免污染 full_content
+                        if msgs and not any(isinstance(m, RemoveMessage) for m in msgs):
                             last = msgs[-1]
                             if hasattr(last, "content") and last.content:
                                 full_content = last.content
@@ -173,7 +174,7 @@ class ChatAgent:
         set_session_context(session_id, user_id)
 
         memory_msgs, _ = await AgentMemory.build_memory_messages(
-            session_id=session_id, user_id=user_id, max_recent=20,
+            session_id=session_id, user_id=user_id, keep_rounds=5,
         )
         input_messages = memory_msgs + [HumanMessage(content=question)]
         config = {"configurable": {"thread_id": session_id}}

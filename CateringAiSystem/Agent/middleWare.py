@@ -48,7 +48,7 @@ class ChatMemoryMiddleware(AgentMiddleware):
     """
     自定义对话记忆压缩中间件
 
-    在消息超过阈值时自动对早期对话做 AI 摘要保留最近 N 条完整对话。
+    在消息超过阈值时自动对早期对话做 AI 摘要保留最近 N 轮完整对话。
     同时负责在 agent 执行前后与 Redis + MySQL 同步记忆。
 
     session_id / user_id 通过 contextvars 动态获取，支持全局单例 Agent。
@@ -57,9 +57,9 @@ class ChatMemoryMiddleware(AgentMiddleware):
     def __init__(
         self,
         llm: BaseChatModel,
-        max_chat_round: int = 30,
+        max_chat_round: int = 15,
         max_tokens: int = 5000,
-        keep_rounds: int = 10,
+        keep_rounds: int = 5,
     ):
         super().__init__()
         self.llm = llm
@@ -76,15 +76,15 @@ class ChatMemoryMiddleware(AgentMiddleware):
         chat_msgs = [m for m in messages if isinstance(m, (HumanMessage, AIMessage))]
 
         total_chars = sum(len(m.content or "") for m in chat_msgs if m.content)
-        exceed_round = len(chat_msgs) > self.max_chat_round
+        exceed_round = len(chat_msgs) > self.max_chat_round * 2
         exceed_tokens = total_chars > self.max_tokens
 
         if not exceed_round and not exceed_tokens:
             return None
 
         # 分割：早期需要摘要的 + 近期保留的
-        need_summary = chat_msgs[:-self.keep_rounds]
-        keep_latest = chat_msgs[-self.keep_rounds:]
+        need_summary = chat_msgs[:-self.keep_rounds * 2]
+        keep_latest = chat_msgs[-self.keep_rounds * 2:]
 
         # LLM 对早期对话做智能摘要
         formatted = self._format_msgs(need_summary)
@@ -109,26 +109,23 @@ class ChatMemoryMiddleware(AgentMiddleware):
         except Exception as e:
             logger.warning(f"摘要持久化失败: {e}")
 
-        # 构建新消息列表：系统 + 摘要 + 近期 + 工具
-        sys_msgs = [m for m in messages if isinstance(m, SystemMessage)]
+        # 构建新消息列表：摘要 + 近期对话 + 工具消息
         tool_msgs = [m for m in messages if isinstance(m, ToolMessage)]
         summary_msg = SystemMessage(content=f"【历史对话摘要】\n{summary_text}")
 
         # 确保每条消息都有 ID（add_messages reducer 需要）
         new_messages: list[BaseMessage] = [summary_msg, *keep_latest, *tool_msgs]
-        for m in sys_msgs + new_messages:
+        for m in new_messages:
             if m.id is None:
                 m.id = str(uuid.uuid4())
 
         logger.info(
             f"记忆压缩完成 | session={session_id} "
-            f"压缩 {len(need_summary)} 轮 → 摘要，保留 {len(keep_latest)} 轮"
         )
 
         return {
             "messages": [
                 RemoveMessage(id=REMOVE_ALL_MESSAGES),
-                *sys_msgs,
                 summary_msg,
                 *keep_latest,
                 *tool_msgs,
