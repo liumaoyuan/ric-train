@@ -43,8 +43,6 @@ async def ask(param: AskParam, request: Request):
                 question=param.question,
                 user_id=user_id,
                 session_id=param.session_id,
-                is_thinking=param.is_thinking,
-                is_online_search=param.is_online_search,
                 user_info=user_info,
             ),
             media_type="text/event-stream",

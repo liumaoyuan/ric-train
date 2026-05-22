@@ -67,7 +67,6 @@ class ChatMemoryMiddleware(AgentMiddleware):
     ) -> AgentState:
         # 从 contextvars 获取当前会话（支持全局单例 Agent）
         session_id = get_session_id()
-        user_id = get_user_id()
 
         messages: List[BaseMessage] = state.get("messages", [])
 

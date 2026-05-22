@@ -43,8 +43,6 @@ class ChatService:
         question: str,
         user_id: str,
         session_id: Optional[str] = None,
-        is_thinking: bool = False,
-        is_online_search: bool = False,
         user_info: Optional[dict] = None,
     ) -> AsyncGenerator[str, None]:
         """流式对话 - 走 create_agent() LangGraph Agent"""
