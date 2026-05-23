@@ -6,44 +6,59 @@ export function askQuestion(data) {
 
 export function askQuestionStream(data, onMessage, onError, onDone) {
   const token = localStorage.getItem('access_token')
-  const xhr = new XMLHttpRequest()
-  xhr.open('POST', '/api/v1/chat/ask')
-  xhr.setRequestHeader('Content-Type', 'application/json')
-  xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-  xhr.responseType = 'text'
+  const controller = new AbortController()
 
-  let lastIndex = 0
+  fetch('/api/v1/chat/ask', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+    signal: controller.signal,
+  }).then(async (response) => {
+    if (!response.ok) {
+      onError && onError(`请求失败: ${response.status}`)
+      return
+    }
 
-  xhr.onprogress = () => {
-    const newData = xhr.responseText.slice(lastIndex)
-    lastIndex = xhr.responseText.length
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
 
-    const lines = newData.split('\n')
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6))
-          if (data.type === 'error') {
-            onError && onError(data.content)
-          } else if (data.type === 'done') {
-            onDone && onDone(data)
-          } else {
-            onMessage && onMessage(data)
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const parsed = JSON.parse(line.slice(6))
+            if (parsed.type === 'error') {
+              onError && onError(parsed.content)
+            } else if (parsed.type === 'done') {
+              onDone && onDone(parsed)
+            } else {
+              onMessage && onMessage(parsed)
+            }
+          } catch {
+            // ignore parse errors for incomplete chunks
           }
-        } catch {
-          // ignore parse errors for incomplete chunks
         }
       }
     }
-  }
+  }).catch((err) => {
+    if (err.name !== 'AbortError') {
+      onError && onError('网络连接失败')
+    }
+  })
 
-  xhr.onerror = () => {
-    onError && onError('网络连接失败')
-  }
-
-  xhr.send(JSON.stringify(data))
-
-  return () => xhr.abort()
+  return () => controller.abort()
 }
 
 export function getSessions() {

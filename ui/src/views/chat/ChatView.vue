@@ -104,7 +104,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, reactive, nextTick, onMounted } from 'vue'
 import {
   Plus, Delete, Promotion,
 } from '@element-plus/icons-vue'
@@ -254,12 +254,12 @@ async function handleSend() {
     isStreaming: false,
   })
 
-  const assistantMsg = {
+  const assistantMsg = reactive({
     role: 'assistant',
     content: '',
     time: new Date().toISOString(),
     isStreaming: true,
-  }
+  })
   messages.value.push(assistantMsg)
   await scrollToBottom()
 
