@@ -77,26 +77,6 @@
 
       <!-- 输入区域 -->
       <div class="input-area">
-        <div class="toolbar">
-          <el-tooltip content="思考模式" placement="top">
-            <el-button
-              :type="isThinking ? 'primary' : 'default'"
-              :icon="Cpu"
-              circle
-              size="small"
-              @click="isThinking = !isThinking"
-            />
-          </el-tooltip>
-          <el-tooltip content="联网搜索" placement="top" v-if="hasWebSearch">
-            <el-button
-              :type="isOnlineSearch ? 'primary' : 'default'"
-              :icon="Search"
-              circle
-              size="small"
-              @click="isOnlineSearch = !isOnlineSearch"
-            />
-          </el-tooltip>
-        </div>
         <div class="input-wrapper">
           <el-input
             v-model="inputText"
@@ -124,10 +104,9 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
-import { useAuthStore } from '../../store/auth'
+import { ref, nextTick, onMounted } from 'vue'
 import {
-  Plus, Delete, Cpu, Search, Promotion,
+  Plus, Delete, Promotion,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
@@ -139,8 +118,6 @@ import {
   getSessionHistory,
 } from '../../api/chat'
 
-const authStore = useAuthStore()
-
 const showSidebar = ref(true)
 const sessions = ref([])
 const currentSessionId = ref('')
@@ -148,13 +125,7 @@ const messages = ref([])
 const inputText = ref('')
 const isProcessing = ref(false)
 const loadingSessions = ref(false)
-const isThinking = ref(false)
-const isOnlineSearch = ref(false)
 const messageListRef = ref(null)
-
-const hasWebSearch = computed(() => {
-  return authStore.hasPermission('chat:web-search')
-})
 
 marked.setOptions({
   breaks: true,
@@ -299,8 +270,6 @@ async function handleSend() {
       question: text,
       session_id: currentSessionId.value || undefined,
       is_stream: true,
-      is_thinking: isThinking.value,
-      is_online_search: isOnlineSearch.value,
     },
     (data) => {
       if (data.type === 'content') {
@@ -660,13 +629,6 @@ onMounted(() => {
   padding: 16px 24px 20px;
   border-top: 1px solid #e8e8e8;
   background: #fff;
-}
-
-.toolbar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-left: 4px;
 }
 
 .input-wrapper {
