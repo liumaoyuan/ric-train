@@ -1,20 +1,20 @@
 """聊天助手 Agent - @tool 工具集"""
-import json
 import logging
-import re
 from datetime import datetime
 
 from langchain.tools import tool
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableConfig
 
-from Base.Ai.llms.qwenLlm import QwenLlm
+from CateringAiSystem.Utils import llm_models
 
 logger = logging.getLogger(__name__)
 
 
 def _get_qwen(**kwargs):
     """获取 Qwen LLM 实例"""
-    return QwenLlm()
+    return llm_models.get_qian_wen()
 
 
 @tool("knowledge_search",
@@ -22,14 +22,19 @@ def _get_qwen(**kwargs):
 async def knowledge_search(query: str) -> str:
     """RAG 知识库检索 - 公司制度、菜品知识、SOP 问答"""
     try:
-        llm = _get_qwen()
-        prompt = f"""你是一个连锁餐饮企业的知识库助手。请根据以下问题提供专业准确的回答。
+        llm = llm_models.get_qian_wen()
+        prompt = PromptTemplate.from_template("""
+        你是一个连锁餐饮企业的知识库助手。请根据以下问题提供专业准确的回答。
 
-问题：{query}
+        问题：{query}
 
-请基于企业知识库的内容回答。如果问题涉及公司制度，请引用相关制度条款。
-如果涉及菜品知识，请说明配方、工艺或标准化流程。如果不确定，请如实说明。"""
-        return llm.invoke(prompt=prompt)
+        请基于企业知识库的内容回答。如果问题涉及公司制度，请引用相关制度条款。
+        如果涉及菜品知识，请说明配方、工艺或标准化流程。如果不确定，请如实说明。
+        """)
+        chain = prompt | llm | StrOutputParser()
+        return await chain.ainvoke({
+            "query": query,
+        })
     except Exception as e:
         logger.error(f"知识库搜索失败：{e}")
         return f"知识库查询暂时不可用，请稍后重试。"
@@ -86,8 +91,12 @@ async def data_query(question: str, config: RunnableConfig = None) -> str:
 async def web_search(query: str) -> str:
     """通过 Qwen 内置搜索能力联网获取最新信息"""
     try:
-        llm = _get_qwen()
-        return llm.invoke(prompt=query, enable_search=True)
+        llm = llm_models.get_qian_wen(enable_search=True)
+        prompt = PromptTemplate.from_template("{query}")
+        chain = prompt | llm | StrOutputParser()
+        return await chain.ainvoke({
+            "query": query,
+        })
     except Exception as e:
         logger.error(f"联网搜索失败：{e}")
         return f"联网搜索暂不可用：{e}"
@@ -100,7 +109,8 @@ async def general_chat(query: str) -> str:
     try:
         llm = _get_qwen()
         return llm.chat(messages=[
-            {"role": "system", "content": '你是一个连锁餐饮企业的 AI 助手，名叫"小餐"。你热情友好、专业耐心，可以回答各种问题，也可以闲聊。请用中文回复，回答简洁自然。'},
+            {"role": "system",
+             "content": '你是一个连锁餐饮企业的 AI 助手，名叫"小餐"。你热情友好、专业耐心，可以回答各种问题，也可以闲聊。请用中文回复，回答简洁自然。'},
             {"role": "user", "content": query},
         ])
     except Exception as e:

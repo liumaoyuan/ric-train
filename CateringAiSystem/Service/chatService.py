@@ -103,7 +103,6 @@ class ChatService:
                 content = token.content_blocks
                 if node == 'model':
                     if content and content[0]['type'] == 'text':
-                        print(content[0]['text'], end='')
                         yield f"data: {json.dumps({'type': 'content', 'content': content[0]['text']}, ensure_ascii=False)}\n\n"
                         full_content += content[0]['text']
             # 持久化

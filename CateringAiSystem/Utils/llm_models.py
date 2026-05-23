@@ -6,14 +6,18 @@ from sentence_transformers import SentenceTransformer
 from Base.Config.setting import settings
 
 
-def get_qian_wen(temperature: float = 0.7, max_tokens: int = 2048):
+def get_qian_wen(temperature: float = 0.7, max_tokens: int = 2048, enable_search: bool = False):
     qwen_config = settings.dashscope
+    extra_kwargs = {}
+    if enable_search:
+        extra_kwargs["extra_body"] = {"enable_search": True}
     model = ChatOpenAI(
         model=qwen_config.default_model,
         api_key=qwen_config.api_key,
         base_url=qwen_config.base_url,
         temperature=temperature,
-        max_tokens=max_tokens
+        max_tokens=max_tokens,
+        **extra_kwargs,
     )
     return model
 

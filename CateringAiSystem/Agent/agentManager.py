@@ -83,7 +83,7 @@ def build(role_codes):
     )
 
     return create_agent(
-        model=llm_models.get_deepseek(),
+        model=llm_models.get_qian_wen(),
         system_prompt=system_prompt,
         tools=tools,
         middleware=[
