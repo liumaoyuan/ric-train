@@ -60,13 +60,11 @@ def _get_role_key(role_codes: List[str]) -> str:
     return ":".join(sorted(role_codes))
 
 
-async def get_agent_for_role(role_codes: List[str]) -> "ChatAgent":
+async def get_agent_for_role(role_codes: List[str]):
     """根据角色列表获取或创建全局单例 Agent"""
     key = _get_role_key(role_codes)
     if key not in _role_agents:
-        agent = ChatAgent(role_codes=role_codes)
-        await agent.build()
-        _role_agents[key] = agent
+        _role_agents[key] = build(role_codes)
         logger.info(f"创建角色 Agent: {key}")
     return _role_agents[key]
 
@@ -75,102 +73,33 @@ def clear_role_agent_cache():
     """清空所有角色 Agent 缓存（测试用）"""
     _role_agents.clear()
 
+def build(role_codes):
+    """构建 LangChain Agent（角色级，不含会话记忆）"""
+    tools = _get_tools_for_role(role_codes)
+
+    tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in tools])
+    system_prompt = SYSTEM_PROMPT_TPL.format(
+        tool_descriptions=tool_descriptions,
+    )
+
+    return create_agent(
+        model=llm_models.get_deepseek(),
+        system_prompt=system_prompt,
+        tools=tools,
+        middleware=[
+            ChatMemoryMiddleware(
+                llm=llm_models.get_deepseek(),
+                max_chat_round=15,
+                max_tokens=5000,
+                keep_rounds=5,
+            ),
+        ],
+    )
 
 class ChatAgent:
     """聊天助手 Agent（全局单例，按角色复用）"""
 
-    def __init__(self, role_codes: List[str]):
-        self.role_codes = role_codes
-        self._agent = None
-
-    async def build(self):
-        """构建 LangChain Agent（角色级，不含会话记忆）"""
-        tools = _get_tools_for_role(self.role_codes)
-
-        tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in tools])
-        system_prompt = SYSTEM_PROMPT_TPL.format(
-            tool_descriptions=tool_descriptions,
-        )
-
-        self._agent = create_agent(
-            model=llm_models.get_deepseek(),
-            system_prompt=system_prompt,
-            tools=tools,
-            middleware=[
-                ChatMemoryMiddleware(
-                    llm=llm_models.get_deepseek(),
-                    max_chat_round=15,
-                    max_tokens=5000,
-                    keep_rounds=5,
-                ),
-            ],
-        )
-
-    async def astream(self, session_id: str, user_id: str, question: str) -> AsyncGenerator[dict, None]:
-        """流式执行 Agent，产生 SSE 事件"""
-        if not self._agent:
-            yield {"type": "error", "content": "Agent 未初始化"}
-            return
-
-        # 设置运行时上下文（中间件通过 contextvars 读取）
-        set_session_context(session_id, user_id)
-
-        # 加载历史记忆作为消息前缀
-        memory_msgs, _ = await AgentMemory.build_memory_messages(
-            session_id=session_id, user_id=user_id, keep_rounds=5,
-        )
-        input_messages = memory_msgs + [HumanMessage(content=question)]
-
-        try:
-            full_content = ""
-            async for event in self._agent.astream_events(
-                {"messages": input_messages},
-            ):
-                kind = event["event"]
-
-                if kind == "on_chat_model_stream":
-                    chunk = event["data"]["chunk"]
-                    if hasattr(chunk, "content") and chunk.content:
-                        full_content += chunk.content
-                        yield {"type": "content", "content": chunk.content}
-
-                elif kind == "on_tool_start":
-                    tool_input = event["data"].get("input", "")
-                    yield {
-                        "type": "tool_call",
-                        "content": json.dumps(
-                            {"tool": event["name"], "input": str(tool_input)[:200]},
-                            ensure_ascii=False,
-                        ),
-                    }
-
-                elif kind == "on_chain_end" and "output" in event["data"]:
-                    output = event["data"]["output"]
-                    if isinstance(output, dict) and "messages" in output:
-                        msgs = output["messages"]
-                        # 跳过中间件的状态更新（含 RemoveMessage），避免污染 full_content
-                        if msgs and not any(isinstance(m, RemoveMessage) for m in msgs):
-                            last = msgs[-1]
-                            if hasattr(last, "content") and last.content:
-                                full_content = last.content
-
-            # Agent 执行完成 → 推送到 Redis 短期记忆
-            if full_content:
-                await AgentMemory.push_to_redis(
-                    session_id,
-                    ("user", question),
-                    ("assistant", full_content),
-                )
-
-        except Exception as e:
-            logger.error(f"Agent 流式执行异常: {e}", exc_info=True)
-            yield {"type": "error", "content": f"处理异常: {e}"}
-
     async def arun(self, session_id: str, user_id: str, question: str) -> str:
-        """非流式执行 Agent"""
-        if not self._agent:
-            return "Agent 未初始化"
-
         set_session_context(session_id, user_id)
 
         memory_msgs, _ = await AgentMemory.build_memory_messages(
@@ -178,28 +107,4 @@ class ChatAgent:
         )
         input_messages = memory_msgs + [HumanMessage(content=question)]
         config = {"configurable": {"thread_id": session_id}}
-
-        try:
-            result = await self._agent.ainvoke(
-                {"messages": input_messages},
-                config=config,
-            )
-            messages = result.get("messages", []) if isinstance(result, dict) else getattr(result, "messages", [])
-            answer = ""
-            if messages:
-                last = messages[-1]
-                answer = last.content if hasattr(last, "content") else str(last)
-            else:
-                answer = str(result)
-
-            if answer:
-                await AgentMemory.push_to_redis(
-                    session_id,
-                    ("user", question),
-                    ("assistant", answer),
-                )
-            return answer
-
-        except Exception as e:
-            logger.error(f"Agent 执行异常: {e}", exc_info=True)
-            return f"处理异常: {e}"
+        return ""

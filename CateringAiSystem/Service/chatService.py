@@ -4,12 +4,15 @@ import logging
 import time
 from typing import AsyncGenerator, Optional
 
+from langchain_core.messages import HumanMessage
+
 from Base.Service.aiService import AiService, AuditingTextError
 from Base.Service.keywordService import keyword_replace_question
 from CateringAiSystem.Agent import (
     AgentMemory,
     get_agent_for_role,
 )
+from CateringAiSystem.Agent.middleWare import set_session_context
 
 logger = logging.getLogger(__name__)
 
@@ -83,40 +86,43 @@ class ChatService:
             # 6. 获取角色 Agent（全局单例）并执行
             agent = await get_agent_for_role(role_codes=roles)
 
-            full_answer = []
-            async for event in agent.astream(
-                session_id=actual_session_id,
-                user_id=user_id,
-                question=final_question,
+            # 设置运行时上下文（中间件通过 contextvars 读取）
+            set_session_context(session_id, user_id)
+
+            # 加载历史记忆作为消息前缀
+            memory_msgs, _ = await AgentMemory.build_memory_messages(
+                session_id=session_id, user_id=user_id, keep_rounds=5,
+            )
+            input_messages = memory_msgs + [HumanMessage(content=question)]
+            full_content = ""
+            async for token, metadata in agent.astream(
+                    {"messages": input_messages},
+                    stream_mode="messages"
             ):
-                event_type = event.get("type", "")
-                event_content = event.get("content", "")
-
-                if event_type == "content":
-                    full_answer.append(event_content)
-                    yield f"data: {json.dumps({'type': 'content', 'content': event_content}, ensure_ascii=False)}\n\n"
-
-                elif event_type == "tool_call":
-                    yield f"data: {json.dumps({'type': 'tool_call', 'content': event_content}, ensure_ascii=False)}\n\n"
-
-                elif event_type == "error":
-                    yield f"data: {json.dumps({'type': 'error', 'content': event_content}, ensure_ascii=False)}\n\n"
-                    cls._save_conversation(question, event_content, user_id, actual_session_id, start_time, status="failed")
-                    return
-
-            # 7. 持久化
-            answer = "".join(full_answer)
-            if answer:
-                cls._save_conversation(question, answer, user_id, actual_session_id, start_time)
+                node = metadata['langgraph_node']
+                content = token.content_blocks
+                if node == 'model':
+                    if content and content[0]['type'] == 'text':
+                        print(content[0]['text'], end='')
+                        yield f"data: {json.dumps({'type': 'content', 'content': content[0]['text']}, ensure_ascii=False)}\n\n"
+                        full_content += content[0]['text']
+            # 持久化
+            if full_content:
+                await AgentMemory.push_to_redis(
+                    session_id,
+                    ("user", question),
+                    ("assistant", full_content),
+                )
+                cls._save_conversation(question, full_content, user_id, actual_session_id, start_time)
 
             yield f"data: {json.dumps({'type': 'done', 'session_id': actual_session_id}, ensure_ascii=False)}\n\n"
 
         except AuditingTextError:
-            error_msg = "内容审核未通过"
+            error_msg = "内容审核未通过，请重新输入"
             cls._save_and_yield_error(question, error_msg, user_id, actual_session_id or session_id, start_time)
         except Exception as e:
             logger.error(f"对话处理异常：{e}", exc_info=True)
-            error_msg = f"处理异常：{e}"
+            error_msg = f"抱歉，服务器错误，请稍后再试"
             yield f"data: {json.dumps({'type': 'error', 'content': error_msg}, ensure_ascii=False)}\n\n"
             cls._save_conversation(
                 question, error_msg, user_id,

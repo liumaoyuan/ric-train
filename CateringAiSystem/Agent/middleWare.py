@@ -113,12 +113,6 @@ class ChatMemoryMiddleware(AgentMiddleware):
         tool_msgs = [m for m in messages if isinstance(m, ToolMessage)]
         summary_msg = SystemMessage(content=f"【历史对话摘要】\n{summary_text}")
 
-        # 确保每条消息都有 ID（add_messages reducer 需要）
-        new_messages: list[BaseMessage] = [summary_msg, *keep_latest, *tool_msgs]
-        for m in new_messages:
-            if m.id is None:
-                m.id = str(uuid.uuid4())
-
         logger.info(
             f"记忆压缩完成 | session={session_id} "
         )
