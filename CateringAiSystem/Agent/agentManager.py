@@ -88,7 +88,7 @@ def build(role_codes):
         tools=tools,
         middleware=[
             ChatMemoryMiddleware(
-                llm=llm_models.get_deepseek(),
+                llm=llm_models.get_qian_wen(),
                 max_chat_round=15,
                 max_tokens=5000,
                 keep_rounds=5,

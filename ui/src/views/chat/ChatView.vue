@@ -135,7 +135,9 @@ marked.setOptions({
 function renderMarkdown(text) {
   if (!text) return ''
   try {
-    return marked.parse(text)
+    // 压缩连续换行：2个以上换行压缩为2个，避免多余段落间距
+    const processed = text.replace(/\n{3,}/g, '\n\n')
+    return marked.parse(processed)
   } catch {
     return text
   }
@@ -519,7 +521,7 @@ onMounted(() => {
   line-height: 1.6;
   font-size: 14px;
   word-break: break-word;
-  white-space: pre-wrap;
+  white-space: normal;
 }
 
 .message-row.user .message-bubble {
@@ -550,20 +552,16 @@ onMounted(() => {
 }
 
 .message-bubble :deep(p) {
-  margin: 0 0 8px;
-}
-
-.message-bubble :deep(p:last-child) {
-  margin-bottom: 0;
+  margin: 0;
 }
 
 .message-bubble :deep(ul), .message-bubble :deep(ol) {
   padding-left: 20px;
-  margin: 8px 0;
+  margin: 4px 0;
 }
 
 .message-bubble :deep(h1), .message-bubble :deep(h2), .message-bubble :deep(h3) {
-  margin: 12px 0 8px;
+  margin: 8px 0 4px;
 }
 
 .message-bubble :deep(h3) {
@@ -574,7 +572,7 @@ onMounted(() => {
   border-left: 3px solid #409EFF;
   padding-left: 12px;
   color: #666;
-  margin: 8px 0;
+  margin: 4px 0;
 }
 
 .message-bubble :deep(table) {
