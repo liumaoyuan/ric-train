@@ -1,4 +1,4 @@
-"""聊天助手 API - LangChain Agent 对话接口"""
+"""聊天助手 API - LangChain Agent 对话接口（仅流式）"""
 import logging
 from typing import Optional
 
@@ -17,8 +17,6 @@ router = APIRouter(prefix="/api/v1/chat", tags=["聊天助手"])
 class AskParam(BaseModel):
     question: str = Field(..., description="用户问题")
     session_id: Optional[str] = Field(None, description="会话ID，为空则自动创建")
-    is_stream: bool = Field(True, description="是否流式输出")
-    is_thinking: bool = Field(False, description="是否展示思考过程")
     is_online_search: bool = Field(False, description="是否联网搜索")
 
 
@@ -28,7 +26,7 @@ class CreateSessionParam(BaseModel):
 
 @router.post("/ask")
 async def ask(param: AskParam, request: Request):
-    """统一对话入口 - 走 LangChain Agent"""
+    """统一对话入口 - 走 LangChain Agent（仅流式）"""
     user = get_current_user(request)
     user_id = str(user["user_id"])
     user_info = {
@@ -37,30 +35,20 @@ async def ask(param: AskParam, request: Request):
         "roles": user.get("roles", []),
     }
 
-    if param.is_stream:
-        return StreamingResponse(
-            ChatService.ask_stream(
-                question=param.question,
-                user_id=user_id,
-                session_id=param.session_id,
-                user_info=user_info,
-            ),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
-    else:
-        result = await ChatService.ask(
+    return StreamingResponse(
+        ChatService.ask_stream(
             question=param.question,
             user_id=user_id,
             session_id=param.session_id,
-            is_online_search=param.is_online_search,
             user_info=user_info,
-        )
-        return {"code": 200, "msg": "success", "data": result}
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/session/list")

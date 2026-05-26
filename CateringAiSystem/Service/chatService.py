@@ -1,4 +1,4 @@
-"""聊天助手服务 - 编排 LangGraph StateGraph Agent 工作流
+"""聊天助手服务 - 编排 LangGraph StateGraph Agent 工作流（仅流式）
 
 会话状态由 LangGraph Checkpointer 自动管理（thread_id = session_id），
 无需手动加载/保存记忆。
@@ -10,11 +10,9 @@ from typing import AsyncGenerator, Optional
 
 from langchain_core.messages import AIMessageChunk, HumanMessage
 
-from Base.Service.aiService import AiService, AuditingTextError
-from Base.Service.keywordService import keyword_replace_question
+from Base.Service.aiService import AuditingTextError
 from CateringAiSystem.Agent import (
     AgentMemory,
-    ChatAgent,
     get_agent_for_role,
 )
 from CateringAiSystem.Agent.middleWare import set_session_context
@@ -23,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChatService:
-    """聊天助手服务"""
+    """聊天助手服务（仅流式）"""
 
     # ── 会话管理 ──
 
@@ -43,7 +41,7 @@ class ChatService:
     def get_conversation_history(session_id: str, user_id: str) -> list:
         return AgentMemory.get_conversation_history(session_id, user_id)
 
-    # ── AI 对话 ──
+    # ── AI 对话（仅流式） ──
 
     @classmethod
     async def ask_stream(
@@ -133,53 +131,6 @@ class ChatService:
                 actual_session_id or (session.session_uuid if session else "unknown"),
                 start_time, status="failed",
             )
-
-    @classmethod
-    async def ask(
-        cls,
-        question: str,
-        user_id: str,
-        session_id: Optional[str] = None,
-        is_online_search: bool = False,
-        user_info: Optional[dict] = None,
-    ) -> dict:
-        """非流式对话 - Checkpointer Agent ainvoke"""
-        session = None
-        actual_session_id = None
-        start_time = time.time()
-
-        try:
-            session = AgentMemory.get_or_create_session(user_id, session_uuid=session_id)
-            actual_session_id = session.session_uuid
-
-            safe_question = keyword_replace_question(question)
-            auditing_dict = AiService.auditing_text(safe_question)
-            if auditing_dict.get("status") == 0:
-                return {"error": "内容审核未通过", "session_id": actual_session_id}
-
-            roles = (user_info or {}).get("roles", ["employee"])
-            store_ids = (user_info or {}).get("store_ids", [])
-
-            set_session_context(actual_session_id, user_id)
-            full_content = await ChatAgent.ainvoke(
-                question=safe_question,
-                session_id=actual_session_id,
-                user_id=user_id,
-                role_codes=roles,
-                store_ids=store_ids,
-            )
-
-            if full_content:
-                cls._save_conversation(
-                    question, full_content, user_id, actual_session_id, start_time,
-                )
-            return {"answer": full_content, "session_id": actual_session_id}
-
-        except AuditingTextError:
-            return {"error": "内容审核未通过", "session_id": actual_session_id}
-        except Exception as e:
-            logger.error("对话处理异常: %s", e, exc_info=True)
-            return {"error": str(e), "session_id": actual_session_id}
 
     # ── 内部工具 ──
 

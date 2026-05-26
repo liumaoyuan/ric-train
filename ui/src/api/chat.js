@@ -1,9 +1,5 @@
 import request from './request'
 
-export function askQuestion(data) {
-  return request.post('/chat/ask', data)
-}
-
 export function askQuestionStream(data, onMessage, onError, onDone) {
   const token = localStorage.getItem('access_token')
   const controller = new AbortController()
