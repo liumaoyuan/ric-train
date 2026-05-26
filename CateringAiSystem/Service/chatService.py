@@ -1,15 +1,20 @@
-"""聊天助手服务 - 编排 LangChain Agent 工作流"""
+"""聊天助手服务 - 编排 LangGraph StateGraph Agent 工作流
+
+会话状态由 LangGraph Checkpointer 自动管理（thread_id = session_id），
+无需手动加载/保存记忆。
+"""
 import json
 import logging
 import time
 from typing import AsyncGenerator, Optional
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessageChunk, HumanMessage
 
 from Base.Service.aiService import AiService, AuditingTextError
 from Base.Service.keywordService import keyword_replace_question
 from CateringAiSystem.Agent import (
     AgentMemory,
+    ChatAgent,
     get_agent_for_role,
 )
 from CateringAiSystem.Agent.middleWare import set_session_context
@@ -48,7 +53,7 @@ class ChatService:
         session_id: Optional[str] = None,
         user_info: Optional[dict] = None,
     ) -> AsyncGenerator[str, None]:
-        """流式对话 - 走 create_agent() LangGraph Agent"""
+        """流式对话 - LangGraph StateGraph astream(messages)"""
         start_time = time.time()
         session = None
         actual_session_id = None
@@ -61,58 +66,58 @@ class ChatService:
             yield f"data: {json.dumps({'type': 'start', 'session_id': actual_session_id}, ensure_ascii=False)}\n\n"
 
             # 2. 关键词替换
-            # safe_question = keyword_replace_question(question)
             safe_question = question
+            # safe_question = keyword_replace_question(question)
 
-            # 3. 文本审核
+            # 3. 文本审核（暂跳过）
             # auditing_dict = AiService.auditing_text(safe_question)
-            # if auditing_dict.get("status") == 0:
-            #     error_msg = "根据《生成式人工智能服务管理暂行办法》，您的问题包含敏感信息，无法处理"
-            #     cls._save_and_yield_error(question, error_msg, user_id, actual_session_id, start_time)
-            #     return
+            # ...
 
-            # 4. 问题改写
-            # rewrite = AiService.rewrite_question(
-            #     question=safe_question,
-            #     user_id=user_id,
-            #     session_id=actual_session_id,
-            # )
-            # final_question = rewrite or safe_question
+            # 4. 问题改写（暂跳过）
+            # final_question = AiService.rewrite_question(...) or safe_question
             final_question = safe_question
 
-            # 5. 获取角色权限
+            # 5. 角色权限
             roles = (user_info or {}).get("roles", ["employee"])
+            store_ids = (user_info or {}).get("store_ids", [])
 
-            # 6. 获取角色 Agent（全局单例）并执行
+            # 6. 设置运行时上下文
+            set_session_context(actual_session_id, user_id)
+
+            # 7. 通过 Checkpointer Agent 流式执行
+            #  Checkpointer 自动从 thread_id 恢复历史消息
             agent = await get_agent_for_role(role_codes=roles)
+            config = {
+                "configurable": {
+                    "thread_id": actual_session_id,
+                    "role_codes": roles,
+                    "store_ids": store_ids,
+                }
+            }
 
-            # 设置运行时上下文（中间件通过 contextvars 读取）
-            set_session_context(session_id, user_id)
-
-            # 加载历史记忆作为消息前缀
-            memory_msgs, _ = await AgentMemory.build_memory_messages(
-                session_id=session_id, user_id=user_id, keep_rounds=5,
-            )
-            input_messages = memory_msgs + [HumanMessage(content=question)]
+            input_message = HumanMessage(content=final_question)
             full_content = ""
-            async for token, metadata in agent.astream(
-                    {"messages": input_messages},
-                    stream_mode="messages"
+
+            # 使用 stream_mode="messages" 逐 token 输出
+            async for event in agent.astream(
+                {"messages": [input_message]},
+                config=config,
+                stream_mode="messages",
             ):
-                node = metadata['langgraph_node']
-                content = token.content_blocks
-                if node == 'model':
-                    if content and content[0]['type'] == 'text':
-                        yield f"data: {json.dumps({'type': 'content', 'content': content[0]['text']}, ensure_ascii=False)}\n\n"
-                        full_content += content[0]['text']
-            # 持久化
+                if isinstance(event, tuple) and len(event) == 2:
+                    chunk, metadata = event
+                    if isinstance(chunk, AIMessageChunk):
+                        node = metadata.get("langgraph_node", "")
+                        content = chunk.content or ""
+                        if node == "call_model" and content:
+                            yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                            full_content += content
+
+            # 8. 持久化对话记录到 MySQL（供前端历史展示）
             if full_content:
-                await AgentMemory.push_to_redis(
-                    session_id,
-                    ("user", question),
-                    ("assistant", full_content),
+                cls._save_conversation(
+                    question, full_content, user_id, actual_session_id, start_time,
                 )
-                cls._save_conversation(question, full_content, user_id, actual_session_id, start_time)
 
             yield f"data: {json.dumps({'type': 'done', 'session_id': actual_session_id}, ensure_ascii=False)}\n\n"
 
@@ -120,8 +125,8 @@ class ChatService:
             error_msg = "内容审核未通过，请重新输入"
             cls._save_and_yield_error(question, error_msg, user_id, actual_session_id or session_id, start_time)
         except Exception as e:
-            logger.error(f"对话处理异常：{e}", exc_info=True)
-            error_msg = f"抱歉，服务器错误，请稍后再试"
+            logger.error("对话处理异常: %s", e, exc_info=True)
+            error_msg = "抱歉，服务器错误，请稍后再试"
             yield f"data: {json.dumps({'type': 'error', 'content': error_msg}, ensure_ascii=False)}\n\n"
             cls._save_conversation(
                 question, error_msg, user_id,
@@ -138,7 +143,7 @@ class ChatService:
         is_online_search: bool = False,
         user_info: Optional[dict] = None,
     ) -> dict:
-        """非流式对话"""
+        """非流式对话 - Checkpointer Agent ainvoke"""
         session = None
         actual_session_id = None
         start_time = time.time()
@@ -152,30 +157,37 @@ class ChatService:
             if auditing_dict.get("status") == 0:
                 return {"error": "内容审核未通过", "session_id": actual_session_id}
 
-            rewrite = AiService.rewrite_question(
-                question=safe_question, user_id=user_id, session_id=actual_session_id,
-            )
-            final_question = rewrite or safe_question
-
             roles = (user_info or {}).get("roles", ["employee"])
-            agent = await get_agent_for_role(role_codes=roles)
+            store_ids = (user_info or {}).get("store_ids", [])
 
-            answer = await agent.arun(
-                session_id=actual_session_id, user_id=user_id, question=final_question,
+            set_session_context(actual_session_id, user_id)
+            full_content = await ChatAgent.ainvoke(
+                question=safe_question,
+                session_id=actual_session_id,
+                user_id=user_id,
+                role_codes=roles,
+                store_ids=store_ids,
             )
-            cls._save_conversation(question, answer, user_id, actual_session_id, start_time)
-            return {"answer": answer, "session_id": actual_session_id}
+
+            if full_content:
+                cls._save_conversation(
+                    question, full_content, user_id, actual_session_id, start_time,
+                )
+            return {"answer": full_content, "session_id": actual_session_id}
 
         except AuditingTextError:
             return {"error": "内容审核未通过", "session_id": actual_session_id}
         except Exception as e:
-            logger.error(f"对话处理异常：{e}", exc_info=True)
+            logger.error("对话处理异常: %s", e, exc_info=True)
             return {"error": str(e), "session_id": actual_session_id}
 
     # ── 内部工具 ──
 
     @classmethod
-    def _save_conversation(cls, question: str, answer: str, user_id: str, session_id: str, start_time: float, status: str = "success"):
+    def _save_conversation(
+        cls, question: str, answer: str, user_id: str,
+        session_id: str, start_time: float, status: str = "success",
+    ):
         AgentMemory.save_conversation(
             question=question, answer=answer,
             user_id=user_id, session_id=session_id,
@@ -184,7 +196,9 @@ class ChatService:
         )
 
     @classmethod
-    async def _save_and_yield_error(cls, question, error_msg, user_id, session_id, start_time, gen=None):
-        if gen:
-            yield f"data: {json.dumps({'type': 'error', 'content': error_msg}, ensure_ascii=False)}\n\n"
-        cls._save_conversation(question, error_msg, user_id, session_id, start_time, status="failed")
+    async def _save_and_yield_error(
+        cls, question, error_msg, user_id, session_id, start_time,
+    ):
+        cls._save_conversation(
+            question, error_msg, user_id, session_id, start_time, status="failed",
+        )
