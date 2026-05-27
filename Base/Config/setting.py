@@ -297,6 +297,23 @@ class Neo4jSettings(BaseEnvSettings):
     )
 
 # =========================
+# LangFuse
+# =========================
+class LangFuseSettings(BaseEnvSettings):
+    public_key: str = ""
+    secret_key: str = ""
+    host: str = Field(
+        "https://cloud.langfuse.com",
+        alias="LANGFUSE_BASE_URL",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="LANGFUSE_",
+        extra="ignore",
+    )
+
+
+# =========================
 # TTS
 # =========================
 class TtsSettings(BaseEnvSettings):
@@ -332,6 +349,7 @@ class Settings(BaseEnvSettings):
     tencent_cos: TencentCOSSettings = Field(default_factory=TencentCOSSettings)
     base_module: BaseModuleSettings = Field(default_factory=BaseModuleSettings)
     neo4j: Neo4jSettings = Field(default_factory=Neo4jSettings)
+    langfuse: LangFuseSettings = Field(default_factory=LangFuseSettings)
     tts: TtsSettings = Field(default_factory=TtsSettings)
 
     # 覆盖 extra="ignore" 以避免加载未知的环境变量

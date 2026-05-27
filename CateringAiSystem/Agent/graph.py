@@ -26,6 +26,8 @@ from CateringAiSystem.Agent.middleWare import get_session_id
 from CateringAiSystem.Agent.tools import TOOL_MAP, knowledge_search, data_query, web_search, general_chat
 from CateringAiSystem.Utils import llm_models
 
+from langfuse import observe
+
 logger = logging.getLogger(__name__)
 
 # ── Agent 状态 ──
@@ -67,6 +69,7 @@ SYSTEM_PROMPT = """你是一个连锁餐饮企业的 AI 智能助手，名叫"�
 # 节点函数
 # ═══════════════════════════════════════════
 
+@observe(as_type="generation", name="LLM_模型调用")
 async def call_model(state: AgentState, config: RunnableConfig) -> dict:
     """LLM 推理节点：注入 System Prompt → 绑定工具 → 判断回复或调用工具"""
     messages = list(state["messages"])
@@ -83,7 +86,7 @@ async def call_model(state: AgentState, config: RunnableConfig) -> dict:
     response: AIMessage = await llm_with_tools.ainvoke(full_messages)
     return {"messages": [response]}
 
-
+@observe(as_type="tool", name="工具执行")
 async def call_tool(state: AgentState, config: RunnableConfig) -> dict:
     """工具执行节点：遍历 LLM 输出的 tool_calls 并执行对应工具"""
     messages = state["messages"]
@@ -119,7 +122,7 @@ async def call_tool(state: AgentState, config: RunnableConfig) -> dict:
 
     return {"messages": results}
 
-
+@observe(as_type="generation", name="记忆压缩_摘要生成")
 async def summary_node(state: AgentState, config: RunnableConfig) -> dict:
     """记忆压缩节点：超过阈值时对早期对话做 AI 摘要，保留最近 KEEP_ROUNDS 轮"""
     messages = state["messages"]
@@ -159,7 +162,7 @@ async def summary_node(state: AgentState, config: RunnableConfig) -> dict:
     # 先删除旧消息，再按正确顺序添加摘要 + 近期对话
     return {"messages": [*remove_ids, summary_msg, *keep_latest]}
 
-
+@observe(as_type="span", name="路由判断", capture_input=False)
 def should_continue(state: AgentState) -> Literal["call_tool", "summary_node", "__end__"]:
     """条件边：tool 调用 → call_tool；超阈值 → summary_node；否则结束"""
     msgs = state.get("messages", [])
