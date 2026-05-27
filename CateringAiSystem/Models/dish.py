@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Dish(DefaultDbModel):
     """菜品信息表"""
     table_alias: ClassVar[str] = "dish"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '菜品ID',
         `name`          VARCHAR(100)    NOT NULL                 COMMENT '菜品名称',
         `category`      VARCHAR(50)     NOT NULL                 COMMENT '分类: 热菜/凉菜/主食/汤品/饮品/配菜',
@@ -47,6 +47,7 @@ class Dish(DefaultDbModel):
                            status: Optional[int] = None,
                            keyword: Optional[str] = None) -> dict:
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}

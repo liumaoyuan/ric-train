@@ -8,7 +8,7 @@ from Base.Repository.models.defaultDbModel import DefaultDbModel
 class SysRoleMenu(DefaultDbModel):
     """角色菜单关联表"""
     table_alias: ClassVar[str] = "sys_role_menu"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`       BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '关联ID',
         `role_id`  BIGINT UNSIGNED NOT NULL                 COMMENT '角色ID（关联 sys_role.id）',
         `menu_id`  BIGINT UNSIGNED NOT NULL                 COMMENT '菜单ID（关联 sys_menu.id）',

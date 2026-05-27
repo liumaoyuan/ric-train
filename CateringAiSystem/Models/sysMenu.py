@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class SysMenu(DefaultDbModel):
     """菜单权限表（树形结构）"""
     table_alias: ClassVar[str] = "sys_menu"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '菜单ID',
         `parent_id`       BIGINT UNSIGNED NOT NULL DEFAULT 0      COMMENT '父菜单ID（0表示根节点）',
         `menu_name`       VARCHAR(100)    NOT NULL                 COMMENT '菜单名称',
@@ -55,6 +55,7 @@ class SysMenu(DefaultDbModel):
     def delete_cascade(cls, menu_id: int) -> dict:
         """删除菜单及其关联（检查子节点 + 删除角色关联）"""
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {"success": False, "message": "数据库连接失败"}

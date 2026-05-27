@@ -8,7 +8,7 @@ from Base.Repository.models.defaultDbModel import DefaultDbModel
 class SysUserRole(DefaultDbModel):
     """用户角色关联表"""
     table_alias: ClassVar[str] = "sys_user_role"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '关联ID',
         `user_id` BIGINT UNSIGNED NOT NULL                 COMMENT '用户ID（关联 sys_user.id）',
         `role_id` BIGINT UNSIGNED NOT NULL                 COMMENT '角色ID（关联 sys_role.id）',

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class DailySummary(DefaultDbModel):
     """营业汇总表（每日每店一条记录）"""
     table_alias: ClassVar[str] = "daily_summary"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '记录ID',
         `store_id`          INT             NOT NULL                 COMMENT '门店ID',
         `summary_date`      DATE            NOT NULL                 COMMENT '日期',
@@ -55,6 +55,7 @@ class DailySummary(DefaultDbModel):
                            date_to: Optional[str] = None,
                            store_ids: Optional[list] = None) -> dict:
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
@@ -104,6 +105,7 @@ LIMIT {offset}, {page_size}"""
                  date_to: Optional[str] = None,
                  store_ids: Optional[list] = None) -> dict:
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {}

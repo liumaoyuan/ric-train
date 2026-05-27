@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class OrderItem(DefaultDbModel):
     """订单菜品明细表"""
     table_alias: ClassVar[str] = "order_item"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '明细ID',
         `order_no`      VARCHAR(50)     NOT NULL                 COMMENT '订单号',
         `store_id`      INT             NOT NULL                 COMMENT '门店ID',

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class TakeoutOrder(DefaultDbModel):
     """外卖订单表"""
     table_alias: ClassVar[str] = "takeout_order"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
         `store_id`          INT             NOT NULL                 COMMENT '门店ID',
         `order_no`          VARCHAR(50)     NOT NULL                 COMMENT '订单号',
@@ -48,6 +48,7 @@ class TakeoutOrder(DefaultDbModel):
                  store_ids: Optional[list] = None) -> dict:
         """外卖订单分页列表"""
         try:
+            cls._ensure_table_exists()
             table_name = cls.get_table_name_with_db()
             store_table = Store.get_table_name_with_db()
             db = cls.get_db_connection()
@@ -110,6 +111,7 @@ LIMIT {page_size} OFFSET {offset}"""
     def get_detail_by_no(cls, order_no: str) -> Optional[dict]:
         """外卖订单详情（含菜品明细）"""
         try:
+            cls._ensure_table_exists()
             table_name = cls.get_table_name_with_db()
             store_table = Store.get_table_name_with_db()
             item_table = OrderItem.get_table_name_with_db()

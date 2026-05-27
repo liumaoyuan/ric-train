@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class SysRole(DefaultDbModel):
     """角色表"""
     table_alias: ClassVar[str] = "sys_role"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '角色ID',
         `role_name`   VARCHAR(50)     NOT NULL                 COMMENT '角色名称（显示用）',
         `role_code`   VARCHAR(50)     NOT NULL                 COMMENT '角色编码（如 admin, employee, franchisee）',
@@ -46,6 +46,7 @@ class SysRole(DefaultDbModel):
                            status: Optional[int] = None) -> dict:
         """分页查询角色列表"""
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
@@ -88,6 +89,7 @@ LIMIT {offset}, {page_size}"""
     def delete_cascade(cls, role_id: int) -> dict:
         """删除角色及其关联（检查用户关联 + 删除菜单关联）"""
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {"success": False, "message": "数据库连接失败"}
@@ -112,6 +114,7 @@ LIMIT {offset}, {page_size}"""
     def assign_menus(cls, role_id: int, menu_ids: list) -> bool:
         """全量替换角色的菜单权限"""
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return False

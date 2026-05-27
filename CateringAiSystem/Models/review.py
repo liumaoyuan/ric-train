@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Review(DefaultDbModel):
     """评论表（风评分析）"""
     table_alias: ClassVar[str] = "review"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`            BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '评论ID',
         `store_id`      INT             NOT NULL                 COMMENT '门店ID',
         `platform`      VARCHAR(20)     NOT NULL                 COMMENT '平台: 美团/饿了么/大众点评',
@@ -48,6 +48,7 @@ class Review(DefaultDbModel):
     @classmethod
     def get_detail(cls, review_id: int) -> Optional[dict]:
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return None
@@ -81,6 +82,7 @@ WHERE r.`id` = %s"""
                            date_to: Optional[str] = None,
                            store_ids: Optional[list] = None) -> dict:
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}

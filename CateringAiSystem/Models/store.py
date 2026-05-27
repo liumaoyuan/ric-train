@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Store(DefaultDbModel):
     """门店信息表"""
     table_alias: ClassVar[str] = "store"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`            INT             NOT NULL AUTO_INCREMENT  COMMENT '门店ID',
         `name`          VARCHAR(100)    NOT NULL                 COMMENT '门店名称',
         `province`      VARCHAR(50)     NOT NULL                 COMMENT '所在省份',
@@ -50,6 +50,7 @@ class Store(DefaultDbModel):
                            status: Optional[int] = None,
                            store_ids: Optional[list] = None) -> dict:
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}

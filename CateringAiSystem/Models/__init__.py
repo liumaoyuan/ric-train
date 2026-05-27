@@ -10,8 +10,10 @@ from .takeoutOrder import TakeoutOrder
 from .orderItem import OrderItem
 from .dailySummary import DailySummary
 from .review import Review
+from .knowledgeModels import KnowledgeDocument, KnowledgeChunk
 
 __all__ = [
     "SysUser", "SysRole", "SysMenu", "SysRoleMenu", "SysUserRole",
     "Store", "Dish", "DineInOrder", "TakeoutOrder", "OrderItem", "DailySummary", "Review",
+    "KnowledgeDocument", "KnowledgeChunk",
 ]

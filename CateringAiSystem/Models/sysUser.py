@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class SysUser(DefaultDbModel):
     """系统用户表"""
     table_alias: ClassVar[str] = "sys_user"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户ID',
         `username`      VARCHAR(50)     NOT NULL                 COMMENT '用户名（登录用）',
         `password_hash` VARCHAR(255)    NOT NULL                 COMMENT '密码哈希（bcrypt）',
@@ -52,6 +52,7 @@ class SysUser(DefaultDbModel):
                            status: Optional[int] = None) -> dict:
         """分页查询用户列表"""
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
@@ -96,6 +97,7 @@ LIMIT {offset}, {page_size}"""
     def delete_cascade(cls, user_id: int) -> bool:
         """删除用户及其关联的角色"""
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return False
@@ -111,6 +113,7 @@ LIMIT {offset}, {page_size}"""
     def assign_roles(cls, user_id: int, role_ids: list) -> bool:
         """全量替换用户角色"""
         try:
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return False
@@ -135,6 +138,7 @@ LIMIT {offset}, {page_size}"""
         try:
             from .sysUserRole import SysUserRole
             from .sysRoleMenu import SysRoleMenu
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return set()
@@ -158,6 +162,7 @@ WHERE ur.`user_id` = %s"""
         try:
             from .sysUserRole import SysUserRole
             from .sysRole import SysRole
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return []
@@ -180,6 +185,7 @@ WHERE ur.`user_id` = %s AND r.`status` = 1"""
             from .sysUserRole import SysUserRole
             from .sysRoleMenu import SysRoleMenu
             from .sysMenu import SysMenu
+            cls._ensure_table_exists()
             db = cls.get_db_connection()
             if db is None:
                 return []

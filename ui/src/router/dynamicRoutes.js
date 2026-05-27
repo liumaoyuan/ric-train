@@ -11,6 +11,7 @@ const componentMap = {
   'views/data/StoreList.vue': () => import('../views/data/StoreList.vue'),
   'views/data/ReviewList.vue': () => import('../views/data/ReviewList.vue'),
   'views/chat/ChatView.vue': () => import('../views/chat/ChatView.vue'),
+  'views/knowledge/KnowledgeList.vue': () => import('../views/knowledge/KnowledgeList.vue'),
 }
 
 const TYPE_MENU = 1

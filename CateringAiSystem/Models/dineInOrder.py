@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class DineInOrder(DefaultDbModel):
     """堂食订单表"""
     table_alias: ClassVar[str] = "dine_in_order"
-    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{{table_name}}` (
+    create_table_sql: ClassVar[str] = f"""CREATE TABLE `{table_alias}` (
         `id`                BIGINT          NOT NULL AUTO_INCREMENT  COMMENT '订单ID',
         `store_id`          INT             NOT NULL                 COMMENT '门店ID',
         `order_no`          VARCHAR(50)     NOT NULL                 COMMENT '订单号',
@@ -51,6 +51,7 @@ class DineInOrder(DefaultDbModel):
                  store_ids: Optional[list] = None) -> dict:
         """堂食订单分页列表"""
         try:
+            cls._ensure_table_exists()
             table_name = cls.get_table_name_with_db()
             store_table = Store.get_table_name_with_db()
             db = cls.get_db_connection()
@@ -113,6 +114,7 @@ LIMIT {page_size} OFFSET {offset}"""
     def get_detail_by_no(cls, order_no: str) -> Optional[dict]:
         """堂食订单详情（含菜品明细）"""
         try:
+            cls._ensure_table_exists()
             table_name = cls.get_table_name_with_db()
             store_table = Store.get_table_name_with_db()
             item_table = OrderItem.get_table_name_with_db()
@@ -171,6 +173,7 @@ WHERE oi.`order_no` = %s"""
                        date_to: Optional[str] = None,
                        store_ids: Optional[list] = None) -> dict:
         try:
+            cls._ensure_table_exists()
             dine_table = cls.get_table_name_with_db()
             takeout_table = TakeoutOrder.get_table_name_with_db()
             store_table = Store.get_table_name_with_db()
@@ -264,6 +267,7 @@ WHERE oi.`order_no` = %s"""
     @classmethod
     def get_order_detail(cls, order_no: str) -> Optional[dict]:
         try:
+            cls._ensure_table_exists()
             dine_table = cls.get_table_name_with_db()
             takeout_table = TakeoutOrder.get_table_name_with_db()
             store_table = Store.get_table_name_with_db()
