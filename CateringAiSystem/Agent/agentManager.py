@@ -39,7 +39,7 @@ def _checkpointer() -> AsyncRedisSaver:
         redis_client = aioredis.Redis(
             host=rc.host, port=rc.port,
             password=rc.password or None,
-            db=rc.db, decode_responses=True,
+            db=rc.db,
         )
         _saver = AsyncRedisSaver(
             redis_client=redis_client,

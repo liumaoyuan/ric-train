@@ -27,59 +27,94 @@ BUSINESS_SCHEMA = """
 数据库: catering_ai_system
 
 表 store（门店）:
-  store_id          INT           PRIMARY KEY   # 门店ID
-  store_name        VARCHAR(100)                # 门店名称（格式：省+城市+xxx店）
-  province          VARCHAR(50)                 # 省份
-  city              VARCHAR(50)                 # 城市
-  address           VARCHAR(255)                # 详细地址
-  status            TINYINT       DEFAULT 1     # 状态 1营业 0停业
-  open_date         DATE                        # 开业日期
+  id                INT           PRIMARY KEY AUTO_INCREMENT  # 门店ID
+  name              VARCHAR(100)  NOT NULL                    # 门店名称
+  province          VARCHAR(50)   NOT NULL                    # 所在省份
+  city              VARCHAR(50)   NOT NULL                    # 所在城市
+  district          VARCHAR(50)   DEFAULT NULL                # 所在区/县
+  address           VARCHAR(200)  DEFAULT NULL                # 详细地址
+  phone             VARCHAR(20)   DEFAULT NULL                # 联系电话
+  open_date         DATE          DEFAULT NULL                # 开业日期
+  status            TINYINT       DEFAULT 1                   # 状态: 1营业 0停业
+  level             TINYINT       DEFAULT 2                   # 门店等级: 1旗舰 2标准 3简配
+  created_at        DATETIME      DEFAULT CURRENT_TIMESTAMP   # 创建时间
+  updated_at        DATETIME      DEFAULT CURRENT_TIMESTAMP   # 更新时间
 
 表 dish（菜品）:
-  dish_id           INT           PRIMARY KEY   # 菜品ID
-  dish_name         VARCHAR(100)                # 菜品名称
-  category          VARCHAR(50)                 # 分类（如：招牌、主食、汤品、小吃、饮品）
-  price             DECIMAL(10,2)               # 价格
-  popularity        INT           DEFAULT 0     # 受欢迎程度（权重，越高越常被点）
+  id                INT           PRIMARY KEY AUTO_INCREMENT  # 菜品ID
+  name              VARCHAR(100)  NOT NULL                    # 菜品名称
+  category          VARCHAR(50)   NOT NULL                    # 分类: 热菜/凉菜/主食/汤品/饮品/配菜
+  price             DECIMAL(10,2) NOT NULL                    # 标准价格
+  cost              DECIMAL(10,2) DEFAULT NULL                # 成本
+  unit              VARCHAR(10)   DEFAULT '份'                # 单位
+  spicy_level       TINYINT       DEFAULT 0                   # 辣度: 0不辣 1微辣 2中辣 3重辣
+  popularity        INT           DEFAULT 50                  # 权重(用于生成销量)
+  image_url         VARCHAR(255)  DEFAULT NULL                # 图片URL
+  status            TINYINT       DEFAULT 1                   # 状态: 1上架 0下架
+  created_at        DATETIME      DEFAULT CURRENT_TIMESTAMP   # 创建时间
 
 表 daily_summary（每日营业汇总）:
-  store_id          INT                         # 门店ID
-  summary_date      DATE                        # 日期
-  total_revenue     DECIMAL(12,2)  DEFAULT 0    # 总营业额
-  total_orders      INT           DEFAULT 0     # 总订单数
-  avg_price         DECIMAL(10,2) DEFAULT 0     # 客单价
-  dine_in_revenue   DECIMAL(12,2) DEFAULT 0     # 堂食营业额
-  takeout_revenue   DECIMAL(12,2) DEFAULT 0     # 外卖营业额
+  id                BIGINT        PRIMARY KEY AUTO_INCREMENT  # 记录ID
+  store_id          INT           NOT NULL                    # 门店ID
+  summary_date      DATE          NOT NULL                    # 日期
+  total_revenue     DECIMAL(12,2) NOT NULL DEFAULT 0.00       # 总营业额
+  total_orders      INT           NOT NULL DEFAULT 0          # 总订单数
+  total_customers   INT           NOT NULL DEFAULT 0          # 总顾客数
+  avg_price         DECIMAL(5,2)  NOT NULL DEFAULT 0.00       # 客单价
+  dine_in_revenue   DECIMAL(12,2) NOT NULL DEFAULT 0.00       # 堂食收入
+  takeout_revenue   DECIMAL(12,2) NOT NULL DEFAULT 0.00       # 外卖收入
+  peak_hour_revenue DECIMAL(12,2) DEFAULT NULL                # 高峰时段收入
+  dish_total_count  INT           NOT NULL DEFAULT 0          # 菜品销售总份数
+  is_holiday        TINYINT       NOT NULL DEFAULT 0          # 是否节假日
+  created_at        DATETIME      DEFAULT CURRENT_TIMESTAMP   # 创建时间
+  唯一索引: (store_id, summary_date)
 
 表 dine_in_order（堂食订单）:
-  order_no          VARCHAR(50)   PRIMARY KEY   # 订单号
-  store_id          INT                         # 门店ID
-  order_date        DATETIME                    # 下单时间
-  total_amount      DECIMAL(10,2)               # 金额
-  payment_method    VARCHAR(20)                 # 支付方式（微信支付/支付宝/现金）
+  id                BIGINT        PRIMARY KEY AUTO_INCREMENT  # 订单ID
+  store_id          INT           NOT NULL                    # 门店ID
+  order_no          VARCHAR(50)   NOT NULL                    # 订单号
+  total_amount      DECIMAL(10,2) NOT NULL DEFAULT 0.00       # 订单总金额
+  payment_method    VARCHAR(20)   NOT NULL                    # 支付方式
+  member_id         INT           DEFAULT NULL                # 会员ID
+  dish_count        TINYINT       NOT NULL DEFAULT 0          # 菜品数量
+  order_time        DATETIME      NOT NULL                    # 下单时间
+  created_at        DATETIME      DEFAULT CURRENT_TIMESTAMP   # 创建时间
+  唯一索引: (order_no)
 
 表 takeout_order（外卖订单）:
-  order_no          VARCHAR(50)   PRIMARY KEY   # 订单号
-  store_id          INT                         # 门店ID
-  order_date        DATETIME                    # 下单时间
-  total_amount      DECIMAL(10,2)               # 金额
-  platform          VARCHAR(50)                 # 外卖平台
-  delivery_fee      DECIMAL(10,2) DEFAULT 0     # 配送费
+  id                BIGINT        PRIMARY KEY AUTO_INCREMENT  # 订单ID
+  store_id          INT           NOT NULL                    # 门店ID
+  order_no          VARCHAR(50)   NOT NULL                    # 订单号
+  total_amount      DECIMAL(10,2) NOT NULL DEFAULT 0.00       # 订单总金额
+  platform          VARCHAR(20)   NOT NULL                    # 外卖平台
+  dish_count        TINYINT       NOT NULL DEFAULT 0          # 菜品数量
+  order_time        DATETIME      NOT NULL                    # 下单时间
+  created_at        DATETIME      DEFAULT CURRENT_TIMESTAMP   # 创建时间
+  唯一索引: (order_no)
 
 表 order_item（订单明细）:
-  id                BIGINT        PRIMARY KEY   # ID
-  order_no          VARCHAR(50)                 # 订单号（关联 dine_in_order/takeout_order）
-  dish_name         VARCHAR(100)                # 菜品名称
-  quantity          INT           DEFAULT 1     # 数量
-  subtotal          DECIMAL(10,2)               # 小计金额
+  id                BIGINT        PRIMARY KEY AUTO_INCREMENT  # 明细ID
+  order_no          VARCHAR(50)   NOT NULL                    # 订单号
+  store_id          INT           NOT NULL                    # 门店ID
+  dish_id           INT           NOT NULL                    # 菜品ID
+  dish_name         VARCHAR(100)  NOT NULL                    # 菜品名称
+  quantity          INT           NOT NULL DEFAULT 1          # 数量
+  price             DECIMAL(10,2) NOT NULL                    # 单价
+  amount            DECIMAL(10,2) NOT NULL                    # 小计金额
 
 表 review（评论）:
-  review_id         BIGINT        PRIMARY KEY   # 评论ID
-  store_id          INT                         # 门店ID
-  platform          VARCHAR(50)                 # 平台来源
-  rating            TINYINT                     # 评分 1-5
-  content           TEXT                        # 评论内容
-  review_date       DATETIME                    # 评论时间
+  id                BIGINT        PRIMARY KEY AUTO_INCREMENT  # 评论ID
+  store_id          INT           NOT NULL                    # 门店ID
+  platform          VARCHAR(20)   NOT NULL                    # 平台: 美团/饿了么/大众点评
+  rating            TINYINT       NOT NULL                    # 评分: 1-5星
+  content           TEXT          NOT NULL                    # 评论内容
+  review_date       DATE          NOT NULL                    # 评论日期
+  review_time       DATETIME      NOT NULL                    # 评论时间
+  tags              VARCHAR(500)  DEFAULT NULL                # 标签(逗号分隔)
+  is_replied        TINYINT       DEFAULT 0                   # 是否已回复
+  reply_content     TEXT          DEFAULT NULL                # 回复内容
+  is_positive       TINYINT       DEFAULT 1                   # 情感: 1正面 0中性 -1负面
+  created_at        DATETIME      DEFAULT CURRENT_TIMESTAMP   # 创建时间
 """
 
 
@@ -155,8 +190,6 @@ async def data_query(question: str, config: Optional[RunnableConfig] = None) -> 
             f"1. 只返回标准 SQL 语句（MySQL），不要任何解释、注释或 markdown\n"
             f"2. 仅生成 SELECT 查询\n"
             f"3. 数值类聚合推荐使用 ROUND(x, 2)\n"
-            f"4. 门店维度查询时注意按 store_id 或 store_name 分组\n"
-            f"5. 自动加 LIMIT 200 上限"
         )
         sql = await llm.ainvoke(sql_prompt)
         sql_text = sql.content if hasattr(sql, "content") else str(sql)
@@ -195,7 +228,7 @@ async def data_query(question: str, config: Optional[RunnableConfig] = None) -> 
             rows = await asyncio.to_thread(conn.execute, fixed_sql)
 
         # Step 4: LLM 总结回答
-        result_str = str(rows[:20]) if rows else "无数据"  # 只取前 20 行防止超出 token
+        result_str = str(rows) if rows else "无数据"
         summary_prompt = (
             f"用户问题：{question}\n\n"
             f"查询结果：{result_str}\n\n"
