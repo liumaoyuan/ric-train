@@ -134,7 +134,7 @@
             :auto-upload="false"
             :show-file-list="true"
             :limit="1"
-            :on-change="handleFileChange"
+            @change="handleFileChange"
             accept=".pdf,.doc,.docx,.txt,.md"
           >
             <el-button type="primary">选择文件</el-button>
@@ -304,6 +304,7 @@ function formatSize(bytes) {
 // ====== 上传文档 ======
 const uploadDialog = reactive({ visible: false })
 const uploadFormRef = ref()
+const uploadRef = ref()
 const uploadSaving = ref(false)
 const uploadFile = ref(null)
 
@@ -314,7 +315,6 @@ const defaultUploadForm = () => ({
 const uploadForm = reactive(defaultUploadForm())
 const uploadRules = {
   title: [{ required: true, message: '请输入文档标题', trigger: 'blur' }],
-  file: [{ required: true, message: '请选择文件', trigger: 'change' }],
   category: [{ required: true, message: '请选择知识分类', trigger: 'change' }],
 }
 
@@ -325,6 +325,7 @@ function handleFileChange(file) {
 function openUpload() {
   Object.assign(uploadForm, defaultUploadForm())
   uploadFile.value = null
+  uploadRef.value?.clearFiles()
   uploadDialog.visible = true
 }
 
