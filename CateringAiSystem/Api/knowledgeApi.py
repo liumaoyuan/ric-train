@@ -27,8 +27,13 @@ async def upload_document(
     if not file.filename:
         return {"code": 400, "msg": "文件不能为空", "data": None}
 
+    content = await file.read()
+    if not content:
+        return {"code": 400, "msg": "文件内容为空", "data": None}
+
     doc_id = KnowledgeService.upload(
-        file=file,
+        file_bytes=content,
+        file_name=file.filename,
         title=title,
         category=category,
         permission_scope=permission_scope,

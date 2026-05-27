@@ -33,29 +33,20 @@ class KnowledgeService:
     # ==================== 文档上传 ====================
 
     @staticmethod
-    def upload(file, title: str, category: str, permission_scope: str,
+    def upload(file_bytes: bytes, file_name: str, title: str, category: str, permission_scope: str,
                chunk_strategy: str, operator_id: int, remark: str = "") -> Optional[int]:
         """上传文档到 MinIO 并创建文档记录"""
         try:
             # 解析文件信息
-            file_name = file.filename
             file_ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
             file_type = file_ext if file_ext in ("pdf", "doc", "docx", "txt", "md") else "other"
-            file_size = 0
+            file_size = len(file_bytes)
 
             # 上传到 MinIO
             os.makedirs("temp_uploads", exist_ok=True)
             temp_path = os.path.join("temp_uploads", file_name)
-            try:
-                with open(temp_path, "wb") as f:
-                    content = file.read()
-                    f.write(content)
-                    file_size = len(content)
-            except Exception:
-                content = file.read()
-                file_size = len(content)
-                with open(temp_path, "wb") as f:
-                    f.write(content)
+            with open(temp_path, "wb") as f:
+                f.write(file_bytes)
 
             minio_path = f"knowledge/{file_name}"
             stored_name = default_minio_client.upload_file(
