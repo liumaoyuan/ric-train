@@ -121,7 +121,8 @@ BUSINESS_SCHEMA = """
 # ── 工具函数 ──
 
 def _get_llm(**kwargs):
-    return llm_models.get_deepseek(**kwargs)
+    return llm_models.get_qian_wen(**kwargs)
+    # return llm_models.get_deepseek(**kwargs)
 
 
 # ═══════════════════════════════════════════════

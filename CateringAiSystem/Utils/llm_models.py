@@ -8,9 +8,9 @@ from Base.Config.setting import settings
 
 def get_qian_wen(temperature: float = 0.7, max_tokens: int = 2048, enable_search: bool = False):
     qwen_config = settings.dashscope
-    extra_kwargs = {}
+    extra_kwargs = {"extra_body": {"enable_thinking": False}}
     if enable_search:
-        extra_kwargs["extra_body"] = {"enable_search": True}
+        extra_kwargs["extra_body"]["enable_search"] = True
     model = ChatOpenAI(
         model=qwen_config.default_model,
         api_key=qwen_config.api_key,
