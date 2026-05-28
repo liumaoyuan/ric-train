@@ -309,21 +309,34 @@
       </div>
       <template #footer>
         <el-button @click="evaluateDialog.visible = false">关闭</el-button>
-        <el-button type="primary" :loading="evaluateSaving" :disabled="!evaluateFile.value" @click="handleEvaluate">
+        <el-button type="primary" :disabled="!evaluateFile" @click="handleEvaluate">
           开始评估
         </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 任务进度弹窗 -->
+    <el-dialog v-model="progressDialog.visible" title="任务进度" width="450px" :close-on-click-modal="false" :close-on-press-escape="false" :show-close="false">
+      <div class="progress-body">
+        <div class="progress-desc">{{ progressDialog.description }}</div>
+        <el-progress :percentage="progressDialog.progress" :status="progressDialog.status === 'exception' ? 'exception' : progressDialog.status === 'success' ? 'success' : ''" :stroke-width="16" :text-inside="true" />
+        <div class="progress-message">{{ progressDialog.message }}</div>
+      </div>
+      <template #footer>
+        <el-button v-if="progressDialog.showClose" type="primary" @click="progressDialog.visible = false">关闭</el-button>
+        <el-button v-else disabled>执行中...</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../../store/auth'
 import {
   getKnowledgeList, uploadDocument, updateKnowledge, deleteKnowledge,
-  previewChunks, vectorizeDocument, evaluateDocument,
+  previewChunks, vectorizeDocument, evaluateDocument, getTaskProgress,
 } from '../../api/knowledge'
 
 const authStore = useAuthStore()
@@ -337,6 +350,48 @@ const loading = ref(false)
 const previewLoading = ref(null)
 const vectorizeLoading = ref(null)
 const rechunkLoading = ref(false)
+
+// ====== 任务进度轮询 ======
+const progressDialog = reactive({
+  visible: false, progress: 0, description: '', message: '', status: '', showClose: false,
+})
+let pollTimer = null
+
+function stopPolling() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
+}
+
+function startPolling(taskId, { onComplete, onFail }) {
+  const poll = async () => {
+    try {
+      const res = await getTaskProgress(taskId)
+      const task = res.data
+      if (!task) { pollTimer = setTimeout(poll, 2000); return }
+
+      progressDialog.progress = task.progress
+      progressDialog.message = task.message
+
+      if (task.status === 'completed') {
+        stopPolling()
+        progressDialog.status = 'success'
+        progressDialog.message = '任务已完成'
+        progressDialog.showClose = true
+        onComplete?.(task.result)
+      } else if (task.status === 'failed') {
+        stopPolling()
+        progressDialog.status = 'exception'
+        progressDialog.message = task.error || '任务失败'
+        progressDialog.showClose = true
+        onFail?.(task.error)
+      } else {
+        pollTimer = setTimeout(poll, 1500)
+      }
+    } catch {
+      pollTimer = setTimeout(poll, 3000)
+    }
+  }
+  poll()
+}
 
 async function fetchData() {
   loading.value = true
@@ -512,23 +567,51 @@ async function handleConfirmVectorize() {
     ElMessage.warning('请至少选择一个分块')
     return
   }
-  vectorizeLoading.value = chunkDialog.docId
+  doVectorize(chunkDialog.docId, { chunk_ids: chunkDialog.selected })
+}
+
+// 表格行上的"确认向量化"按钮
+async function handleVectorize(row) {
+  doVectorize(row.id)
+}
+
+async function doVectorize(docId, extraData = {}) {
+  progressDialog.description = '文档向量化中...'
+  progressDialog.progress = 0
+  progressDialog.message = '正在提交任务...'
+  progressDialog.status = ''
+  progressDialog.showClose = false
+  progressDialog.visible = true
+
   try {
-    await vectorizeDocument(chunkDialog.docId, { chunk_ids: chunkDialog.selected })
-    ElMessage.success('向量化成功！')
-    chunkDialog.visible = false
-    fetchData()
+    const res = await vectorizeDocument(docId, extraData)
+    if (res.code === 200 && res.data?.task_id) {
+      startPolling(res.data.task_id, {
+        onComplete: () => {
+          ElMessage.success('向量化成功！')
+          chunkDialog.visible = false
+          fetchData()
+          setTimeout(() => { progressDialog.visible = false }, 1500)
+        },
+        onFail: (err) => {
+          ElMessage.error('向量化失败：' + err)
+        },
+      })
+    } else {
+      progressDialog.status = 'exception'
+      progressDialog.message = res.msg || '提交失败'
+      progressDialog.showClose = true
+    }
   } catch (e) {
-    ElMessage.error('向量化失败')
-  } finally {
-    vectorizeLoading.value = null
+    progressDialog.status = 'exception'
+    progressDialog.message = e.message || '请求失败'
+    progressDialog.showClose = true
   }
 }
 
 // ====== RAGAS 评估 ======
 const evaluateDialog = reactive({ visible: false, docId: null, result: '' })
 const evaluateUploadRef = ref()
-const evaluateSaving = ref(false)
 const evaluateFile = ref(null)
 
 function handleEvaluateFileChange(file) {
@@ -548,25 +631,46 @@ async function handleEvaluate() {
     ElMessage.warning('请选择评估文件')
     return
   }
-  evaluateSaving.value = true
-  evaluateDialog.result = ''
+
+  evaluateDialog.visible = false
+
+  progressDialog.description = 'RAGAS 评估中...'
+  progressDialog.progress = 0
+  progressDialog.message = '正在提交评估任务...'
+  progressDialog.status = ''
+  progressDialog.showClose = false
+  progressDialog.visible = true
+
   try {
     const formData = new FormData()
     formData.append('file', evaluateFile.value)
     const res = await evaluateDocument(evaluateDialog.docId, formData)
-    if (res.data?.code === 200) {
-      evaluateDialog.result = res.data.data?.summary || '评估完成，但无摘要信息'
+    if (res.code === 200 && res.data?.task_id) {
+      startPolling(res.data.task_id, {
+        onComplete: (result) => {
+          evaluateDialog.visible = true
+          // 把评估报告显示在评估对话框里
+          evaluateDialog.result = result?.summary || '评估完成，但无摘要信息'
+          progressDialog.visible = false
+        },
+        onFail: (err) => {
+          ElMessage.error('RAGAS 评估失败：' + err)
+        },
+      })
     } else {
-      evaluateDialog.result = '评估失败：' + (res.data?.msg || '未知错误')
+      progressDialog.status = 'exception'
+      progressDialog.message = res.msg || '提交失败'
+      progressDialog.showClose = true
     }
   } catch (e) {
-    evaluateDialog.result = '评估请求失败：' + (e.message || '未知错误')
-  } finally {
-    evaluateSaving.value = false
+    progressDialog.status = 'exception'
+    progressDialog.message = e.message || '请求失败'
+    progressDialog.showClose = true
   }
 }
 
 onMounted(fetchData)
+onUnmounted(stopPolling)
 </script>
 
 <style scoped>
@@ -579,11 +683,14 @@ onMounted(fetchData)
   padding: 8px 0;
   border-bottom: 1px solid #ebeef5;
 }
-.chunk-item .el-checkbox {
+.chunk-item :deep(.el-checkbox) {
   display: flex;
   align-items: flex-start;
+  width: 100%;
 }
-.chunk-item .el-checkbox .el-checkbox__label {
+.chunk-item :deep(.el-checkbox__label) {
+  display: flex;
+  flex-direction: column;
   white-space: pre-wrap;
   word-break: break-all;
   flex: 1;
@@ -638,4 +745,7 @@ onMounted(fetchData)
   padding: 12px;
   border-radius: 4px;
 }
+.progress-body { text-align: center; padding: 16px 0; }
+.progress-desc { font-size: 15px; color: #303133; margin-bottom: 20px; font-weight: 500; }
+.progress-message { font-size: 13px; color: #909399; margin-top: 12px; }
 </style>

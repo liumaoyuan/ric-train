@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import threading
 from typing import Optional
 
 from pymilvus import CollectionSchema, FieldSchema, DataType
@@ -380,16 +381,158 @@ class KnowledgeService:
             return False
 
     @staticmethod
-    def evaluate(doc_id: int, test_cases: list) -> dict:
+    def vectorize_async(doc_id: int, chunk_ids: Optional[list] = None) -> str:
+        """异步向量化：创建后台任务并立即返回 task_id"""
+        from CateringAiSystem.Utils.taskProgress import TaskProgress
+
+        task_id = TaskProgress.create(f"文档向量化 (ID: {doc_id})")
+
+        def _run():
+            try:
+                TaskProgress.update(task_id, status="running", progress=5, message="准备中...")
+
+                doc = KnowledgeDocument.get_by_id(doc_id)
+                if doc is None:
+                    TaskProgress.fail(task_id, "文档不存在")
+                    return
+
+                # 如果已向量化，先删旧向量
+                if doc.status == 2:
+                    KnowledgeService._delete_milvus_vectors(doc_id)
+                    TaskProgress.update(task_id, progress=10, message="已清除旧向量")
+
+                # 确认分块
+                if chunk_ids:
+                    KnowledgeChunk.batch_approve(chunk_ids)
+                TaskProgress.update(task_id, progress=15, message="分块已确认")
+
+                chunks = KnowledgeChunk.get_by_doc_id(doc_id, approved_only=True)
+                if not chunks:
+                    TaskProgress.fail(task_id, "没有已确认的分块")
+                    return
+
+                # 获取 Qwen Embedding
+                try:
+                    from Base.Ai.llms.qwenLlm import QwenLlm
+                    llm = QwenLlm()
+                except Exception:
+                    TaskProgress.fail(task_id, "无法初始化 QwenLlm")
+                    return
+
+                # 逐块生成 Embedding
+                total = len(chunks)
+                milvus_data = []
+                for i, chunk in enumerate(chunks):
+                    text = chunk.chunk_content
+                    if not text:
+                        continue
+                    try:
+                        vector = llm.embedding(text=text, dimensions=VECTOR_DIM)[0]
+                    except Exception as e:
+                        logger.error(f"Embedding 失败 (chunk {chunk.id}): {e}")
+                        continue
+
+                    milvus_data.append({
+                        "embedding": vector,
+                        "text": text[:65500],
+                        "doc_id": doc_id,
+                        "category": doc.category or "",
+                        "permission_scope": doc.permission_scope or "all",
+                        "chunk_index": chunk.chunk_index,
+                    })
+
+                    pct = 15 + int((i + 1) / total * 70)
+                    TaskProgress.update(task_id, progress=pct, message=f"向量化中 ({i+1}/{total})")
+
+                if not milvus_data:
+                    TaskProgress.fail(task_id, "没有可向量化的分块")
+                    return
+
+                # 写入 Milvus
+                TaskProgress.update(task_id, progress=90, message="写入向量数据库...")
+                KnowledgeService._ensure_milvus_collection()
+
+                milvus_client = MilvusClientSingleton()
+                result = milvus_client.insert(collection_name=MILVUS_COLLECTION, data=milvus_data)
+                if not result.get("success"):
+                    TaskProgress.fail(task_id, "Milvus 插入失败")
+                    return
+
+                doc.update(status=2, chunk_count=len(chunks))
+                TaskProgress.complete(task_id, {"chunk_count": len(chunks)})
+            except Exception as e:
+                logger.error(f"向量化失败: {e}")
+                TaskProgress.fail(task_id, str(e))
+
+        threading.Thread(target=_run, daemon=True).start()
+        return task_id
+
+    @staticmethod
+    async def evaluate(doc_id: int, test_cases: list) -> dict:
         """手动触发 RAGAS 评估"""
         try:
             from CateringAiSystem.Agent.evaluation.ragas_eval import RAGEvaluator
-            import asyncio
-            report = asyncio.run(RAGEvaluator.evaluate(doc_id=doc_id, test_cases=test_cases))
+            report = await RAGEvaluator.evaluate(doc_id=doc_id, test_cases=test_cases)
             return report
         except Exception as e:
             logger.error(f"RAGAS 评估失败: {e}")
             return {"error": str(e), "scores": {}, "summary": "评估执行失败"}
+
+    @staticmethod
+    def evaluate_async(doc_id: int, test_cases: list) -> str:
+        """异步 RAGAS 评估：创建后台任务并立即返回 task_id"""
+        from CateringAiSystem.Utils.taskProgress import TaskProgress
+
+        task_id = TaskProgress.create(f"RAGAS 评估 (文档 ID: {doc_id})")
+
+        def _run():
+            import asyncio
+            try:
+                TaskProgress.update(task_id, status="running", progress=5, message="初始化评估...")
+
+                from CateringAiSystem.Agent.evaluation.ragas_eval import RAGEvaluator
+
+                total = len(test_cases)
+                cases = test_cases or RAGEvaluator.TEST_CASES
+                questions = [c["question"] for c in cases]
+                ground_truths = [c.get("ground_truth", "") for c in cases]
+
+                answers = []
+                contexts_list = []
+
+                for i, q in enumerate(questions):
+                    pct = 5 + int((i + 1) / total * 75)
+                    TaskProgress.update(task_id, progress=pct, message=f"正在评估 ({i+1}/{total}): {q[:20]}...")
+
+                    answer, contexts = asyncio.run(RAGEvaluator._run_rag_pipeline(
+                        question=q, permission_scope="all", top_k=5,
+                    ))
+                    answers.append(answer)
+                    contexts_list.append(contexts)
+
+                TaskProgress.update(task_id, progress=85, message="计算 RAGAS 指标...")
+                scores = asyncio.run(RAGEvaluator._compute_ragas_scores(questions, answers, contexts_list, ground_truths))
+
+                TaskProgress.update(task_id, progress=92, message="计算检索指标...")
+                hit_rate, mrr = RAGEvaluator._compute_retrieval_metrics(questions, contexts_list, ground_truths)
+                scores["hit_rate"] = hit_rate
+                scores["mrr"] = mrr
+
+                summary = RAGEvaluator._format_report(scores, len(cases))
+                report = {
+                    "scores": scores,
+                    "summary": summary,
+                    "test_case_count": len(cases),
+                    "passed": RAGEvaluator._check_targets(scores),
+                }
+
+                TaskProgress.complete(task_id, report)
+            except Exception as e:
+                logger.error(f"RAGAS 评估失败: {e}")
+                TaskProgress.fail(task_id, str(e))
+
+        threading.Thread(target=_run, daemon=True).start()
+        return task_id
 
     @staticmethod
     def _ensure_milvus_collection():

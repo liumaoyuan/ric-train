@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request, Query, UploadFile, File, Form
 
 from CateringAiSystem.Service.knowledgeService import KnowledgeService
 from CateringAiSystem.Utils.rbacUtils import get_current_user, require_permission
+from CateringAiSystem.Utils.taskProgress import TaskProgress
 
 logger = logging.getLogger(__name__)
 
@@ -111,12 +112,10 @@ def preview_chunks(doc_id: int, data: Optional[dict] = None, request: Request = 
 @router.post("/{doc_id}/vectorize")
 @require_permission("knowledge:vectorize")
 def vectorize_document(doc_id: int, data: dict, request: Request):
-    """确认向量化（可选指定 chunk_ids）"""
+    """确认向量化（可选指定 chunk_ids），异步执行返回 task_id"""
     chunk_ids = data.get("chunk_ids")
-    success = KnowledgeService.confirm_vectorize(doc_id, chunk_ids)
-    if not success:
-        return {"code": 500, "msg": "向量化失败", "data": None}
-    return {"code": 200, "msg": "向量化成功", "data": None}
+    task_id = KnowledgeService.vectorize_async(doc_id, chunk_ids)
+    return {"code": 200, "msg": "任务已提交", "data": {"task_id": task_id}}
 
 
 @router.post("/search")
@@ -145,7 +144,7 @@ def search_knowledge(request: Request, data: dict):
 @router.post("/{doc_id}/evaluate")
 @require_permission("knowledge:vectorize")
 async def evaluate_document(doc_id: int, request: Request, file: UploadFile = File(...)):
-    """手动传入评估文档并执行 RAGAS 评估（JSON 格式的测试用例）"""
+    """手动传入评估文档并执行 RAGAS 评估，异步执行返回 task_id"""
     if not file.filename:
         return {"code": 400, "msg": "评估文件不能为空", "data": None}
 
@@ -164,10 +163,17 @@ async def evaluate_document(doc_id: int, request: Request, file: UploadFile = Fi
         if not isinstance(tc, dict) or "question" not in tc:
             return {"code": 400, "msg": "每个测试用例需包含 question 字段，可选 ground_truth 字段", "data": None}
 
-    report = KnowledgeService.evaluate(doc_id, test_cases)
-    if "error" in report:
-        return {"code": 500, "msg": "评估执行失败", "data": report}
-    return {"code": 200, "msg": "success", "data": report}
+    task_id = KnowledgeService.evaluate_async(doc_id, test_cases)
+    return {"code": 200, "msg": "任务已提交", "data": {"task_id": task_id}}
+
+
+@router.get("/task/{task_id}")
+def get_task_progress(task_id: str):
+    """查询后台任务进度"""
+    task = TaskProgress.get(task_id)
+    if task is None:
+        return {"code": 404, "msg": "任务不存在", "data": None}
+    return {"code": 200, "msg": "success", "data": task}
 
 
 @router.get("/{doc_id}/chunks")

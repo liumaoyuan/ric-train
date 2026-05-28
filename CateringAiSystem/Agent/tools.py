@@ -131,25 +131,57 @@ def _get_llm(**kwargs):
 
 @tool("knowledge_search",
       description="搜索企业知识库（公司制度、菜品知识、运营SOP等）。当用户询问公司政策、制度规定、菜品配方、制作工艺、操作流程等问题时调用。参数 query：用户的原始问题。")
-async def knowledge_search(query: str) -> str:
-    """RAG 知识库检索——后续接入真实 Milvus 向量检索"""
+async def knowledge_search(query: str, config: Optional[RunnableConfig] = None) -> str:
+    """RAG 知识库检索（基于 Milvus 向量检索）"""
     try:
-        # TODO: 接入真实 Milvus 知识库检索
-        # from CateringAiSystem.Service.knowledgeService import KnowledgeService
-        # docs = await KnowledgeService.asearch(query, top_k=5)
-        # context = "\n\n".join(d.content for d in docs)
-        # prompt = f"基于以下知识库内容回答问题：\n\n{context}\n\n问题：{query}"
-        # return await _get_llm().ainvoke(prompt)
+        from CateringAiSystem.Service.knowledgeService import KnowledgeService
 
+        # 根据用户角色确定权限范围
+        role_codes = []
+        if config and config.get("configurable", {}).get("role_codes"):
+            role_codes = config["configurable"]["role_codes"]
+
+        if "franchisee" in role_codes and "employee" not in role_codes and "admin" not in role_codes:
+            permission_scope = "franchisee_only"
+        elif "employee" in role_codes or "admin" in role_codes:
+            permission_scope = "all"
+        else:
+            permission_scope = "all"
+
+        # 执行向量检索
+        results = KnowledgeService.search(query=query, permission_scope=permission_scope, top_k=5)
+        if not results:
+            llm = _get_llm()
+            prompt = PromptTemplate.from_template(
+                "你是一个连锁餐饮企业的知识库助手。知识库中没有找到与问题直接相关的内容。\n\n"
+                "问题：{query}\n\n"
+                "请基于你的通用知识尝试回答，并说明这是通用知识而非企业知识库的内容。"
+            )
+            chain = prompt | llm | StrOutputParser()
+            return await chain.ainvoke({"query": query})
+
+        # 拼接检索结果为上下文
+        context_parts = []
+        for r in results:
+            text = r.get("text", "").strip()
+            if text:
+                context_parts.append(text)
+        context = "\n\n---\n\n".join(context_parts)
+
+        # LLM 基于上下文生成回答
         llm = _get_llm()
         prompt = PromptTemplate.from_template(
-            "你是一个连锁餐饮企业的知识库助手。请根据以下问题提供专业准确的回答。\n\n"
+            "你是一个连锁餐饮企业的知识库助手。请严格基于以下参考内容回答问题。\n\n"
+            "参考内容：\n{context}\n\n"
             "问题：{query}\n\n"
-            "请基于企业知识库的内容回答。如果问题涉及公司制度，请引用相关制度条款。"
-            "如果涉及菜品知识，请说明配方、工艺或标准化流程。如果不确定，请如实说明。"
+            "要求：\n"
+            "1. 只使用参考内容中的信息作答，不要编造\n"
+            "2. 如果参考内容不足以回答问题，请如实说明'知识库中没有相关信息'\n"
+            "3. 涉及制度条款时，引用具体内容\n"
+            "4. 回答简洁准确"
         )
         chain = prompt | llm | StrOutputParser()
-        return await chain.ainvoke({"query": query})
+        return await chain.ainvoke({"query": query, "context": context})
     except Exception as e:
         logger.error("知识库搜索失败：%s", e)
         return "知识库查询暂时不可用，请稍后重试。"

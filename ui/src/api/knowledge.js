@@ -53,3 +53,8 @@ export function evaluateDocument(id, formData) {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
+
+// 查询后台任务进度
+export function getTaskProgress(taskId) {
+  return request.get(`/knowledge/task/${taskId}`)
+}
