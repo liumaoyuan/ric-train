@@ -683,19 +683,20 @@ onUnmounted(stopPolling)
   padding: 8px 0;
   border-bottom: 1px solid #ebeef5;
 }
+.chunk-item:last-child { border-bottom: none; }
 .chunk-item :deep(.el-checkbox) {
   display: flex;
   align-items: flex-start;
   width: 100%;
 }
+.chunk-item :deep(.el-checkbox__input) {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
 .chunk-item :deep(.el-checkbox__label) {
-  display: flex;
-  flex-direction: column;
-  white-space: pre-wrap;
-  word-break: break-all;
+  width: 0;
   flex: 1;
 }
-.chunk-item:last-child { border-bottom: none; }
 .chunk-header {
   display: flex;
   align-items: center;
@@ -715,9 +716,9 @@ onUnmounted(stopPolling)
   font-size: 13px;
   color: #303133;
   line-height: 1.6;
-  margin-left: 24px;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .rechunk-section {
   padding: 8px 0;
