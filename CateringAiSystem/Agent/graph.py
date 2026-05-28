@@ -74,13 +74,34 @@ async def call_model(state: AgentState, config: RunnableConfig) -> dict:
     """LLM 推理节点：注入 System Prompt → 绑定工具 → 判断回复或调用工具"""
     messages = list(state["messages"])
 
+    # 清理孤儿 tool_calls：因中断导致 AI 消息有 tool_calls 但缺少对应 ToolMessage
+    tool_call_ids = set()
+    resolved_ids = set()
+    for msg in messages:
+        if isinstance(msg, AIMessage):
+            for tc in getattr(msg, "tool_calls", []):
+                tool_call_ids.add(tc["id"])
+        elif isinstance(msg, ToolMessage):
+            resolved_ids.add(msg.tool_call_id)
+    orphaned_ids = tool_call_ids - resolved_ids
+    if orphaned_ids:
+        logger.warning("清理 %d 个孤立 tool_call", len(orphaned_ids))
+        messages = [
+            m for m in messages
+            if not (
+                isinstance(m, AIMessage)
+                and getattr(m, "tool_calls", None)
+                and all(tc["id"] in orphaned_ids for tc in m.tool_calls)
+            )
+        ]
+
     role_codes: list = config["configurable"].get("role_codes", ["admin"])
     tools = _pick_tools(role_codes)
 
     # System Prompt 注入到消息开头（不持久化到 Checkpointer）
     full_messages = [SystemMessage(content=SYSTEM_PROMPT), *messages]
 
-    llm = llm_models.get_qian_wen()
+    llm = llm_models.get_deepseek()
     llm_with_tools = llm.bind_tools(tools)
 
     response: AIMessage = await llm_with_tools.ainvoke(full_messages)
@@ -137,7 +158,7 @@ async def summary_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # LLM 生成摘要
     formatted = _format_msgs(need_summary)
-    llm = llm_models.get_qian_wen()
+    llm = llm_models.get_deepseek()
     try:
         resp = await llm.ainvoke(
             f"请简洁总结以下多轮对话的核心内容、关键信息和重要约定，精简但不要丢失重要信息：\n"

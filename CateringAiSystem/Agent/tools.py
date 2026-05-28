@@ -121,7 +121,7 @@ BUSINESS_SCHEMA = """
 # ── 工具函数 ──
 
 def _get_llm(**kwargs):
-    return llm_models.get_qian_wen(**kwargs)
+    return llm_models.get_deepseek(**kwargs)
 
 
 # ═══════════════════════════════════════════════
@@ -251,7 +251,7 @@ async def data_query(question: str, config: Optional[RunnableConfig] = None) -> 
 async def web_search(query: str) -> str:
     """通义千问内置联网搜索"""
     try:
-        llm = _get_llm(enable_search=True)
+        llm = llm_models.get_qian_wen(enable_search=True)
         resp = await llm.ainvoke(query)
         return resp.content if hasattr(resp, "content") else str(resp)
     except Exception as e:
