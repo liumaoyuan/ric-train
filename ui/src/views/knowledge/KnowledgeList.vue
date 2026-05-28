@@ -456,6 +456,15 @@ onMounted(fetchData)
   padding: 8px 0;
   border-bottom: 1px solid #ebeef5;
 }
+.chunk-item .el-checkbox {
+  display: flex;
+  align-items: flex-start;
+}
+.chunk-item .el-checkbox .el-checkbox__label {
+  white-space: pre-wrap;
+  word-break: break-all;
+  flex: 1;
+}
 .chunk-item:last-child { border-bottom: none; }
 .chunk-header {
   display: flex;
