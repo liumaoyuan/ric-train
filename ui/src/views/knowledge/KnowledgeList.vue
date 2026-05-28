@@ -71,13 +71,13 @@
         <el-table-column label="上传时间" width="170">
           <template #default="{ row }">{{ row.created_at }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="350" fixed="right">
           <template #default="{ row }">
             <el-button v-if="hasPerm('knowledge:edit') && row.status !== 2" text size="small" type="primary" @click="openEdit(row)">
               编辑
             </el-button>
             <el-button
-              v-if="hasPerm('knowledge:preview') && row.status === 0"
+              v-if="hasPerm('knowledge:preview')"
               text
               size="small"
               type="primary"
@@ -95,6 +95,15 @@
               :loading="vectorizeLoading === row.id"
             >
               确认向量化
+            </el-button>
+            <el-button
+              v-if="hasPerm('knowledge:vectorize') && row.status === 2"
+              text
+              size="small"
+              type="warning"
+              @click="openEvaluate(row)"
+            >
+              RAGAS评估
             </el-button>
             <el-button
               v-if="hasPerm('knowledge:delete')"
@@ -239,6 +248,28 @@
             <div class="chunk-content">{{ chunk.chunk_content_full || chunk.chunk_content }}</div>
           </el-checkbox>
         </div>
+
+        <!-- 已向量化文档的重新分块区域 -->
+        <template v-if="chunkDialog.docStatus === 2">
+          <el-divider />
+          <div class="rechunk-section">
+            <span class="rechunk-title">重新分块</span>
+            <el-form :inline="true" class="rechunk-form">
+              <el-form-item label="分块策略">
+                <el-select v-model="chunkDialog.rechunkStrategy" style="width: 160px">
+                  <el-option label="固定长度（默认）" value="fixed" />
+                  <el-option label="段落分割" value="paragraph" />
+                  <el-option label="递归分块" value="recursive" />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="rechunkLoading" @click="handleRechunk">
+                  重新分块
+                </el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+        </template>
       </div>
       <template #footer>
         <el-button @click="chunkDialog.visible = false">取消</el-button>
@@ -252,16 +283,47 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- RAGAS 评估弹窗 -->
+    <el-dialog v-model="evaluateDialog.visible" title="RAGAS 评估" width="600px" :close-on-click-modal="false">
+      <el-form label-width="120px">
+        <el-form-item label="评估文档">
+          <el-upload
+            ref="evaluateUploadRef"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept=".json"
+            @change="handleEvaluateFileChange"
+          >
+            <el-button type="primary">选择 JSON 文件</el-button>
+            <template #tip>
+              <span class="el-upload__tip">上传包含测试用例的 JSON 文件，格式：[{"question": "...", "ground_truth": "..."}]</span>
+            </template>
+          </el-upload>
+        </el-form-item>
+      </el-form>
+      <div v-if="evaluateDialog.result" class="evaluate-result">
+        <el-divider />
+        <pre class="evaluate-summary">{{ evaluateDialog.result }}</pre>
+      </div>
+      <template #footer>
+        <el-button @click="evaluateDialog.visible = false">关闭</el-button>
+        <el-button type="primary" :loading="evaluateSaving" :disabled="!evaluateFile.value" @click="handleEvaluate">
+          开始评估
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../../store/auth'
 import {
   getKnowledgeList, uploadDocument, updateKnowledge, deleteKnowledge,
-  previewChunks, vectorizeDocument,
+  previewChunks, vectorizeDocument, evaluateDocument,
 } from '../../api/knowledge'
 
 const authStore = useAuthStore()
@@ -274,6 +336,7 @@ const total = ref(0)
 const loading = ref(false)
 const previewLoading = ref(null)
 const vectorizeLoading = ref(null)
+const rechunkLoading = ref(false)
 
 async function fetchData() {
   loading.value = true
@@ -396,8 +459,9 @@ function handleDelete(row) {
 
 // ====== 分块预览与向量化 ======
 const chunkDialog = reactive({
-  visible: false, docId: null, chunks: [],
+  visible: false, docId: null, docStatus: null, chunks: [],
   selected: [], selectAll: false, isIndeterminate: false,
+  rechunkStrategy: 'fixed',
 })
 
 async function handlePreview(row) {
@@ -406,10 +470,12 @@ async function handlePreview(row) {
     const res = await previewChunks(row.id)
     const chunks = res.data?.chunks || []
     chunkDialog.docId = row.id
+    chunkDialog.docStatus = row.status
     chunkDialog.chunks = chunks
     chunkDialog.selected = chunks.map(c => c.id)
     chunkDialog.selectAll = true
     chunkDialog.isIndeterminate = false
+    chunkDialog.rechunkStrategy = row.chunk_strategy || 'fixed'
     chunkDialog.visible = true
   } catch (e) {
     ElMessage.error('分块预览失败')
@@ -418,12 +484,28 @@ async function handlePreview(row) {
   }
 }
 
+async function handleRechunk() {
+  rechunkLoading.value = true
+  try {
+    const res = await previewChunks(chunkDialog.docId, { chunk_strategy: chunkDialog.rechunkStrategy })
+    const chunks = res.data?.chunks || []
+    chunkDialog.chunks = chunks
+    chunkDialog.selected = chunks.map(c => c.id)
+    chunkDialog.selectAll = true
+    chunkDialog.isIndeterminate = false
+    chunkDialog.docStatus = 1
+    ElMessage.success('重新分块完成')
+  } catch (e) {
+    ElMessage.error('重新分块失败')
+  } finally {
+    rechunkLoading.value = false
+  }
+}
+
 function handleSelectAll(val) {
   chunkDialog.selected = val ? chunkDialog.chunks.map(c => c.id) : []
   chunkDialog.isIndeterminate = false
 }
-
-const chunkDialogComputedSelected = computed(() => chunkDialog.selected)
 
 async function handleConfirmVectorize() {
   if (chunkDialog.selected.length === 0) {
@@ -440,6 +522,47 @@ async function handleConfirmVectorize() {
     ElMessage.error('向量化失败')
   } finally {
     vectorizeLoading.value = null
+  }
+}
+
+// ====== RAGAS 评估 ======
+const evaluateDialog = reactive({ visible: false, docId: null, result: '' })
+const evaluateUploadRef = ref()
+const evaluateSaving = ref(false)
+const evaluateFile = ref(null)
+
+function handleEvaluateFileChange(file) {
+  evaluateFile.value = file.raw
+}
+
+function openEvaluate(row) {
+  evaluateDialog.docId = row.id
+  evaluateDialog.visible = true
+  evaluateDialog.result = ''
+  evaluateFile.value = null
+  evaluateUploadRef.value?.clearFiles()
+}
+
+async function handleEvaluate() {
+  if (!evaluateFile.value) {
+    ElMessage.warning('请选择评估文件')
+    return
+  }
+  evaluateSaving.value = true
+  evaluateDialog.result = ''
+  try {
+    const formData = new FormData()
+    formData.append('file', evaluateFile.value)
+    const res = await evaluateDocument(evaluateDialog.docId, formData)
+    if (res.data?.code === 200) {
+      evaluateDialog.result = res.data.data?.summary || '评估完成，但无摘要信息'
+    } else {
+      evaluateDialog.result = '评估失败：' + (res.data?.msg || '未知错误')
+    }
+  } catch (e) {
+    evaluateDialog.result = '评估请求失败：' + (e.message || '未知错误')
+  } finally {
+    evaluateSaving.value = false
   }
 }
 
@@ -488,5 +611,31 @@ onMounted(fetchData)
   margin-left: 24px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+.rechunk-section {
+  padding: 8px 0;
+}
+.rechunk-title {
+  font-weight: bold;
+  font-size: 14px;
+  color: #303133;
+  margin-bottom: 8px;
+  display: block;
+}
+.rechunk-form {
+  margin-top: 8px;
+}
+.evaluate-result {
+  max-height: 400px;
+  overflow-y: auto;
+}
+.evaluate-summary {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #f5f7fa;
+  padding: 12px;
+  border-radius: 4px;
 }
 </style>

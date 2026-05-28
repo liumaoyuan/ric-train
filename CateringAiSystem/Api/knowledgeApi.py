@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Optional
 
@@ -94,9 +95,14 @@ def delete_document(doc_id: int, request: Request):
 
 @router.post("/{doc_id}/preview")
 @require_permission("knowledge:preview")
-def preview_chunks(doc_id: int, request: Request):
-    """分块预览（解析文档并返回分块列表供确认）"""
-    chunks = KnowledgeService.parse_and_chunk(doc_id)
+def preview_chunks(doc_id: int, data: Optional[dict] = None, request: Request = None):
+    """分块预览（解析文档并返回分块列表供确认）
+    可传入 chunk_strategy 重新分块（用于已向量化文档的重分块）
+    """
+    chunk_strategy = None
+    if data and isinstance(data, dict):
+        chunk_strategy = data.get("chunk_strategy")
+    chunks = KnowledgeService.parse_and_chunk(doc_id, chunk_strategy=chunk_strategy)
     if chunks is None:
         return {"code": 404, "msg": "文档不存在或解析失败", "data": None}
     return {"code": 200, "msg": "success", "data": {"chunks": chunks, "total": len(chunks)}}
@@ -134,6 +140,34 @@ def search_knowledge(request: Request, data: dict):
 
     results = KnowledgeService.search(query, permission_scope=permission_scope, top_k=top_k)
     return {"code": 200, "msg": "success", "data": {"results": results}}
+
+
+@router.post("/{doc_id}/evaluate")
+@require_permission("knowledge:vectorize")
+async def evaluate_document(doc_id: int, request: Request, file: UploadFile = File(...)):
+    """手动传入评估文档并执行 RAGAS 评估（JSON 格式的测试用例）"""
+    if not file.filename:
+        return {"code": 400, "msg": "评估文件不能为空", "data": None}
+
+    content = await file.read()
+    if not content:
+        return {"code": 400, "msg": "文件内容为空", "data": None}
+
+    try:
+        test_cases = json.loads(content)
+    except json.JSONDecodeError:
+        return {"code": 400, "msg": "评估文件格式错误，需要 JSON 格式", "data": None}
+
+    if not isinstance(test_cases, list):
+        return {"code": 400, "msg": "评估文件应为 JSON 数组格式", "data": None}
+    for tc in test_cases:
+        if not isinstance(tc, dict) or "question" not in tc:
+            return {"code": 400, "msg": "每个测试用例需包含 question 字段，可选 ground_truth 字段", "data": None}
+
+    report = KnowledgeService.evaluate(doc_id, test_cases)
+    if "error" in report:
+        return {"code": 500, "msg": "评估执行失败", "data": report}
+    return {"code": 200, "msg": "success", "data": report}
 
 
 @router.get("/{doc_id}/chunks")

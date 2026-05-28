@@ -27,9 +27,9 @@ export function deleteKnowledge(id) {
   return request.delete(`/knowledge/${id}`)
 }
 
-// 分块预览
-export function previewChunks(id) {
-  return request.post(`/knowledge/${id}/preview`)
+// 分块预览（可选传入 chunk_strategy 重新分块）
+export function previewChunks(id, data = {}) {
+  return request.post(`/knowledge/${id}/preview`, data)
 }
 
 // 确认向量化
@@ -45,4 +45,11 @@ export function searchKnowledge(data) {
 // 获取文档分块列表
 export function getDocumentChunks(id) {
   return request.get(`/knowledge/${id}/chunks`)
+}
+
+// 手动 RAGAS 评估（上传 JSON 评估文件）
+export function evaluateDocument(id, formData) {
+  return request.post(`/knowledge/${id}/evaluate`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }

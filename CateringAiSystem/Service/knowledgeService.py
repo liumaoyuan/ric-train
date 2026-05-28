@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 import re
@@ -89,13 +88,57 @@ class KnowledgeService:
     # ==================== 文档解析与分块 ====================
 
     @staticmethod
-    def parse_and_chunk(doc_id: int) -> Optional[list]:
-        """解析文档并分块（返回分块列表供预览）"""
+    def _delete_milvus_vectors(doc_id: int):
+        """从 Milvus 删除指定文档的所有向量"""
+        try:
+            milvus_client = MilvusClientSingleton()
+            if milvus_client.get_client().has_collection(MILVUS_COLLECTION):
+                milvus_client.delete(
+                    collection_name=MILVUS_COLLECTION,
+                    filter=f"doc_id == {doc_id}",
+                )
+                logger.info(f"已删除 Milvus 中 doc_id={doc_id} 的向量")
+        except Exception as e:
+            logger.warning(f"删除 Milvus 向量失败: {e}")
+
+    @staticmethod
+    def parse_and_chunk(doc_id: int, chunk_strategy: Optional[str] = None) -> Optional[list]:
+        """解析文档并分块（返回分块列表供预览）
+
+        Args:
+            doc_id: 文档ID
+            chunk_strategy: 分块策略，若提供则覆盖文档原有策略并重新分块
+        """
         try:
             doc = KnowledgeDocument.get_by_id(doc_id)
             if doc is None:
                 logger.warning(f"文档不存在: {doc_id}")
                 return None
+
+            # 如果已分块或已向量化，且未传入新策略，直接返回现有分块
+            if doc.status in (1, 2) and not chunk_strategy:
+                existing_chunks = KnowledgeChunk.get_by_doc_id(doc_id)
+                if existing_chunks:
+                    return [
+                        {
+                            "id": c.id,
+                            "chunk_index": c.chunk_index,
+                            "chunk_content": c.chunk_content[:200] + ("..." if len(c.chunk_content) > 200 else ""),
+                            "chunk_content_full": c.chunk_content,
+                            "token_count": c.token_count,
+                            "approved": c.approved,
+                        }
+                        for c in existing_chunks
+                    ]
+
+            # 如果文档已向量化，先删除 Milvus 向量
+            if doc.status == 2:
+                KnowledgeService._delete_milvus_vectors(doc_id)
+
+            # 如果传入了新的分块策略，更新文档
+            if chunk_strategy and chunk_strategy != doc.chunk_strategy:
+                doc.update(chunk_strategy=chunk_strategy)
+                doc = KnowledgeDocument.get_by_id(doc_id)
 
             # 从 MinIO 下载临时文件
             os.makedirs("temp_uploads", exist_ok=True)
@@ -271,6 +314,10 @@ class KnowledgeService:
                 logger.warning(f"文档不存在: {doc_id}")
                 return False
 
+            # 如果已向量化，先删除旧向量避免重复
+            if doc.status == 2:
+                KnowledgeService._delete_milvus_vectors(doc_id)
+
             # 获取已确认的分块
             if chunk_ids:
                 KnowledgeChunk.batch_approve(chunk_ids)
@@ -327,21 +374,22 @@ class KnowledgeService:
             doc.update(status=2, chunk_count=len(chunks))
             logger.info(f"文档向量化成功: {doc.title} ({len(chunks)} 个分块)")
 
-            # 向量化完成后触发 RAGAS 评估（异步执行，失败不影响主流程）
-            try:
-                from CateringAiSystem.Agent.evaluation.ragas_eval import evaluate_after_vectorize
-                import threading
-                threading.Thread(
-                    target=lambda: asyncio.run(evaluate_after_vectorize(doc_id)),
-                    daemon=True,
-                ).start()
-            except Exception as eval_err:
-                logger.warning(f"RAGAS 评估触发失败（不影响向量化）: {eval_err}")
-
             return True
         except Exception as e:
             logger.error(f"向量化失败: {e}")
             return False
+
+    @staticmethod
+    def evaluate(doc_id: int, test_cases: list) -> dict:
+        """手动触发 RAGAS 评估"""
+        try:
+            from CateringAiSystem.Agent.evaluation.ragas_eval import RAGEvaluator
+            import asyncio
+            report = asyncio.run(RAGEvaluator.evaluate(doc_id=doc_id, test_cases=test_cases))
+            return report
+        except Exception as e:
+            logger.error(f"RAGAS 评估失败: {e}")
+            return {"error": str(e), "scores": {}, "summary": "评估执行失败"}
 
     @staticmethod
     def _ensure_milvus_collection():
