@@ -19,6 +19,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.redis import AsyncRedisSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
+from langgraph.types import interrupt
 from typing_extensions import Annotated, TypedDict
 
 from CateringAiSystem.Agent.memory import AgentMemory
@@ -63,6 +64,11 @@ SYSTEM_PROMPT = """你是一个连锁餐饮企业的 AI 智能助手，名叫"�
 - 每次只调用一个工具，根据返回结果决定下一步
 - 收到工具结果后整理成自然语言回答，简洁明了
 - 不要暴露工具调用细节，直接呈现结果"""
+
+
+# ── 需要人工审核的敏感工具 ──
+
+HUMAN_REVIEW_TOOLS = {"data_query", "web_search"}
 
 
 # ═══════════════════════════════════════════
@@ -143,6 +149,42 @@ async def call_tool(state: AgentState, config: RunnableConfig) -> dict:
 
     return {"messages": results}
 
+@observe(as_type="span", name="人工审核")
+async def human_review_node(state: AgentState, config: RunnableConfig) -> dict:
+    """人工审核节点：敏感工具（data_query / web_search）执行前暂停等待审批"""
+    last_msg = state["messages"][-1] if state["messages"] else None
+    if not last_msg or not getattr(last_msg, "tool_calls", None):
+        return {"messages": []}
+
+    sensitive_calls = [tc for tc in last_msg.tool_calls if tc["name"] in HUMAN_REVIEW_TOOLS]
+    if not sensitive_calls:
+        return {"messages": []}
+
+    # 暂停图执行，暴露审核信息给前端
+    review_data = {
+        "type": "human_review",
+        "tool_calls": [
+            {"name": tc["name"], "args": tc["args"], "id": tc["id"]}
+            for tc in sensitive_calls
+        ],
+    }
+    result = interrupt(review_data)
+
+    decision = result.get("decision", "reject") if isinstance(result, dict) else "reject"
+
+    if decision == "reject":
+        return {"messages": [
+            ToolMessage(
+                content=f"管理员拒绝了该操作: {tc['name']}",
+                tool_call_id=tc["id"],
+                name=tc["name"],
+            ) for tc in sensitive_calls
+        ]}
+
+    # approve / 放行，让 call_tool 正常执行
+    return {"messages": []}
+
+
 @observe(as_type="generation", name="记忆压缩_摘要生成")
 async def summary_node(state: AgentState, config: RunnableConfig) -> dict:
     """记忆压缩节点：超过阈值时对早期对话做 AI 摘要，保留最近 KEEP_ROUNDS 轮"""
@@ -184,12 +226,15 @@ async def summary_node(state: AgentState, config: RunnableConfig) -> dict:
     return {"messages": [*remove_ids, summary_msg, *keep_latest]}
 
 @observe(as_type="span", name="路由判断", capture_input=False)
-def should_continue(state: AgentState) -> Literal["call_tool", "summary_node", "__end__"]:
-    """条件边：tool 调用 → call_tool；超阈值 → summary_node；否则结束"""
+def should_continue(state: AgentState) -> Literal["call_tool", "human_review", "summary_node", "__end__"]:
+    """条件边：敏感工具 → human_review；普通工具 → call_tool；超阈值 → summary_node；否则结束"""
     msgs = state.get("messages", [])
     if msgs:
         last = msgs[-1]
         if getattr(last, "tool_calls", None):
+            for tc in last.tool_calls:
+                if tc["name"] in HUMAN_REVIEW_TOOLS:
+                    return "human_review"
             return "call_tool"
 
     chat_msgs = [m for m in msgs if isinstance(m, (HumanMessage, AIMessage))]
@@ -236,6 +281,7 @@ def build_agent(saver: AsyncRedisSaver) -> StateGraph:
     workflow = StateGraph(AgentState)
     workflow.add_node("call_model", call_model)
     workflow.add_node("call_tool", call_tool)
+    workflow.add_node("human_review", human_review_node)
     workflow.add_node("summary_node", summary_node)
 
     workflow.set_entry_point("call_model")
@@ -243,9 +289,15 @@ def build_agent(saver: AsyncRedisSaver) -> StateGraph:
     workflow.add_conditional_edges(
         "call_model",
         should_continue,
-        {"call_tool": "call_tool", "summary_node": "summary_node", "__end__": END},
+        {
+            "call_tool": "call_tool",
+            "human_review": "human_review",
+            "summary_node": "summary_node",
+            "__end__": END,
+        },
     )
-    workflow.add_edge("call_tool", "call_model")    # 工具执行后回到 LLM 继续推理
-    workflow.add_edge("summary_node", END)          # 压缩后结束（响应已就绪）
+    workflow.add_edge("call_tool", "call_model")
+    workflow.add_edge("human_review", "call_tool")
+    workflow.add_edge("summary_node", END)
 
     return workflow.compile(checkpointer=saver)

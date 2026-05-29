@@ -9,6 +9,7 @@ import time
 from typing import AsyncGenerator, Optional
 
 from langchain_core.messages import AIMessageChunk, HumanMessage
+from langgraph.types import Command
 
 from Base.Service.aiService import AuditingTextError
 from CateringAiSystem.Agent import (
@@ -111,7 +112,24 @@ class ChatService:
                             yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
                             full_content += content
 
-            # 8. 持久化对话记录到 MySQL（供前端历史展示）
+            # 8. 检查是否因人工审核中断
+            try:
+                state = await agent.aget_state(config)
+                if state and state.next:
+                    for interrupt_item in state.interrupts:
+                        review_data = interrupt_item.value
+                        if isinstance(review_data, dict) and review_data.get("type") == "human_review":
+                            review_event = json.dumps({
+                                'type': 'human_review',
+                                'session_id': actual_session_id,
+                                'data': review_data,
+                            }, ensure_ascii=False)
+                            yield f"data: {review_event}\n\n"
+                            return  # 等待前端 resume，不保存对话
+            except Exception as e:
+                logger.warning("检查中断状态失败: %s", e)
+
+            # 9. 持久化对话记录到 MySQL（供前端历史展示）
             if full_content:
                 cls._save_conversation(
                     question, full_content, user_id, actual_session_id, start_time,
@@ -130,6 +148,90 @@ class ChatService:
                 question, error_msg, user_id,
                 actual_session_id or (session.session_uuid if session else "unknown"),
                 start_time, status="failed",
+            )
+
+    @classmethod
+    async def resume_stream(
+        cls,
+        session_id: str,
+        decision: dict,
+        user_id: str,
+        user_info: Optional[dict] = None,
+    ) -> AsyncGenerator[str, None]:
+        """人工审核后恢复 Agent 执行（流式）"""
+        start_time = time.time()
+        roles = (user_info or {}).get("roles", ["employee"])
+        store_ids = (user_info or {}).get("store_ids", [])
+
+        try:
+            agent = await get_agent_for_role(role_codes=roles)
+            config = {
+                "configurable": {
+                    "thread_id": session_id,
+                    "role_codes": roles,
+                    "store_ids": store_ids,
+                }
+            }
+
+            set_session_context(session_id, user_id)
+
+            # 从 checkpoint 获取原始问题（用于保存对话记录）
+            original_question = ""
+            try:
+                state_snap = await agent.aget_state(config)
+                if state_snap and state_snap.values:
+                    for m in reversed(state_snap.values.get("messages", [])):
+                        if isinstance(m, HumanMessage):
+                            original_question = m.content if hasattr(m, "content") else ""
+                            break
+            except Exception:
+                pass
+
+            full_content = ""
+
+            async for event in agent.astream(
+                Command(resume=decision),
+                config=config,
+                stream_mode="messages",
+            ):
+                if isinstance(event, tuple) and len(event) == 2:
+                    chunk, metadata = event
+                    if isinstance(chunk, AIMessageChunk):
+                        node = metadata.get("langgraph_node", "")
+                        content = chunk.content or ""
+                        if node == "call_model" and content:
+                            yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                            full_content += content
+
+            # 检查是否再次中断（连续审核场景）
+            try:
+                state = await agent.aget_state(config)
+                if state and state.next:
+                    for interrupt_item in state.interrupts:
+                        review_data = interrupt_item.value
+                        if isinstance(review_data, dict) and review_data.get("type") == "human_review":
+                            review_event = json.dumps({
+                                'type': 'human_review',
+                                'session_id': session_id,
+                                'data': review_data,
+                            }, ensure_ascii=False)
+                            yield f"data: {review_event}\n\n"
+                            return
+            except Exception as e:
+                logger.warning("检查中断状态失败: %s", e)
+
+            if full_content:
+                cls._save_conversation(
+                    original_question, full_content, user_id, session_id, start_time,
+                )
+
+            yield f"data: {json.dumps({'type': 'done', 'session_id': session_id}, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            logger.error("恢复执行异常: %s", e, exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'content': '恢复执行失败'}, ensure_ascii=False)}\n\n"
+            cls._save_conversation(
+                "", f"恢复执行失败: {e}", user_id, session_id, start_time, status="failed",
             )
 
     # ── 内部工具 ──

@@ -75,6 +75,33 @@
         </div>
       </div>
 
+      <!-- 人工审核弹窗 -->
+      <div v-if="showReviewDialog && pendingReview" class="review-overlay">
+        <div class="review-dialog">
+          <div class="review-title">需要管理员审批</div>
+          <div class="review-body">
+            <p>AI 正在尝试执行以下操作，需要管理员确认：</p>
+            <div v-for="(tc, idx) in pendingReview.tool_calls" :key="idx" class="review-tool-call">
+              <div class="review-tool-name">{{ tc.name }}</div>
+              <div class="review-tool-args">
+                <div v-for="(val, key) in tc.args" :key="key" class="review-arg-item">
+                  <span class="review-arg-key">{{ key }}:</span>
+                  <span class="review-arg-value">{{ val }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="review-actions">
+            <el-button type="danger" :loading="isReviewing" @click="handleReview('reject')">
+              拒绝
+            </el-button>
+            <el-button type="primary" :loading="isReviewing" @click="handleReview('approve')">
+              批准
+            </el-button>
+          </div>
+        </div>
+      </div>
+
       <!-- 输入区域 -->
       <div class="input-area">
         <div class="input-wrapper">
@@ -112,6 +139,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import {
   askQuestionStream,
+  resumeQuestionStream,
   getSessions,
   createSession,
   deleteSession,
@@ -126,6 +154,11 @@ const inputText = ref('')
 const isProcessing = ref(false)
 const loadingSessions = ref(false)
 const messageListRef = ref(null)
+
+// 人工审核状态
+const pendingReview = ref(null)       // { tool_calls: [...] }
+const showReviewDialog = ref(false)
+const isReviewing = ref(false)
 
 marked.setOptions({
   breaks: true,
@@ -248,6 +281,8 @@ async function handleSend() {
 
   inputText.value = ''
   isProcessing.value = true
+  pendingReview.value = null
+  showReviewDialog.value = false
 
   messages.value.push({
     role: 'user',
@@ -267,18 +302,14 @@ async function handleSend() {
 
   let streamContent = ''
 
-  const abort = askQuestionStream(
+  askQuestionStream(
     {
       question: text,
       session_id: currentSessionId.value || undefined,
       is_stream: true,
     },
     (data) => {
-      if (data.type === 'content') {
-        streamContent += data.content
-        assistantMsg.content = streamContent
-        scrollToBottom()
-      } else if (data.type === 'reasoning') {
+      if (data.type === 'content' || data.type === 'reasoning') {
         streamContent += data.content
         assistantMsg.content = streamContent
         scrollToBottom()
@@ -286,6 +317,12 @@ async function handleSend() {
         if (data.session_id && !currentSessionId.value) {
           currentSessionId.value = data.session_id
           loadSessions()
+        }
+      } else if (data.type === 'human_review') {
+        // 需要人工审核，保存审核数据
+        pendingReview.value = {
+          session_id: data.session_id,
+          tool_calls: data.data?.tool_calls || [],
         }
       }
     },
@@ -297,9 +334,15 @@ async function handleSend() {
     () => {
       assistantMsg.isStreaming = false
       isProcessing.value = false
-      assistantMsg.time = new Date().toISOString()
-      if (messages.value.length === 2) {
-        loadSessions()
+
+      if (pendingReview.value) {
+        // 流正常结束且有审核待处理 → 弹出审核弹窗
+        showReviewDialog.value = true
+      } else {
+        assistantMsg.time = new Date().toISOString()
+        if (messages.value.length === 2) {
+          loadSessions()
+        }
       }
     },
   )
@@ -311,6 +354,48 @@ async function scrollToBottom() {
   if (container) {
     container.scrollTop = container.scrollHeight
   }
+}
+
+async function handleReview(decision) {
+  if (!pendingReview.value || isReviewing.value) return
+  isReviewing.value = true
+  showReviewDialog.value = false
+
+  const lastMsg = messages.value[messages.value.length - 1]
+  if (lastMsg?.role === 'assistant') {
+    lastMsg.isStreaming = true
+  }
+
+  let streamContent = ''
+
+  resumeQuestionStream(
+    pendingReview.value.session_id,
+    { decision },
+    (data) => {
+      if (data.type === 'content' || data.type === 'reasoning') {
+        streamContent += data.content
+        if (lastMsg) {
+          lastMsg.content = streamContent
+        }
+        scrollToBottom()
+      }
+    },
+    (error) => {
+      if (lastMsg) {
+        lastMsg.content = error || '恢复执行失败'
+        lastMsg.isStreaming = false
+      }
+      isReviewing.value = false
+      pendingReview.value = null
+    },
+    () => {
+      if (lastMsg) {
+        lastMsg.isStreaming = false
+      }
+      isReviewing.value = false
+      pendingReview.value = null
+    },
+  )
 }
 
 onMounted(() => {
@@ -409,11 +494,16 @@ onMounted(() => {
   color: #f56c6c;
 }
 
+.chat-container {
+  position: relative;
+}
+
 .chat-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   background: #fff;
+  position: relative;
 }
 
 .message-list {
@@ -647,5 +737,80 @@ onMounted(() => {
   border-radius: 8px;
   padding: 0 24px;
   flex-shrink: 0;
+}
+
+/* 人工审核弹窗 */
+.review-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.review-dialog {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 460px;
+  max-width: 90%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.review-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16px;
+}
+
+.review-body {
+  margin-bottom: 20px;
+}
+
+.review-body p {
+  color: #666;
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.review-tool-call {
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.review-tool-name {
+  font-weight: 600;
+  color: #409eff;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.review-arg-item {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 4px;
+  display: flex;
+  gap: 4px;
+}
+
+.review-arg-key {
+  color: #999;
+  flex-shrink: 0;
+}
+
+.review-arg-value {
+  color: #333;
+  word-break: break-all;
+}
+
+.review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 </style>

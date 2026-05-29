@@ -20,6 +20,11 @@ class AskParam(BaseModel):
     is_online_search: bool = Field(False, description="是否联网搜索")
 
 
+class ResumeParam(BaseModel):
+    session_id: str = Field(..., description="会话ID（thread_id）")
+    decision: dict = Field(..., description="审核决定: {\"decision\": \"approve\"|\"reject\"}")
+
+
 class CreateSessionParam(BaseModel):
     title: Optional[str] = Field(None, description="会话标题")
 
@@ -40,6 +45,33 @@ async def ask(param: AskParam, request: Request):
             question=param.question,
             user_id=user_id,
             session_id=param.session_id,
+            user_info=user_info,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/resume")
+async def resume(param: ResumeParam, request: Request):
+    """人工审核后恢复 Agent 执行（流式）"""
+    user = get_current_user(request)
+    user_id = str(user["user_id"])
+    user_info = {
+        "user_id": user["user_id"],
+        "username": user.get("username", ""),
+        "roles": user.get("roles", []),
+    }
+
+    return StreamingResponse(
+        ChatService.resume_stream(
+            session_id=param.session_id,
+            decision=param.decision,
+            user_id=user_id,
             user_info=user_info,
         ),
         media_type="text/event-stream",
