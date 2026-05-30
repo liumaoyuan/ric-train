@@ -364,13 +364,38 @@ async def data_update(sql: str, config: Optional[RunnableConfig] = None) -> str:
     # ── 执行 SQL ──
     try:
         from Base.Repository.base.connectionManager import ConnectionManager
-        conn = ConnectionManager.get_default()
-        if conn is None:
+        conn_wrapper = ConnectionManager.get_default()
+        if conn_wrapper is None:
             return "数据库连接不可用，请检查数据库配置。"
 
-        import asyncio
-        rows = await asyncio.to_thread(conn.execute, sql)
-        return f"执行成功，影响行数: {rows}" if isinstance(rows, int) else f"执行成功: {rows}"
+        # 如果连接被标记为不可用（之前失败的查询导致），尝试恢复
+        if not conn_wrapper._is_available:
+            logger.warning("连接标记为不可用，尝试重新初始化...")
+            conn_wrapper._is_available = True
+            try:
+                conn_wrapper._create_connection_pool()
+            except Exception as pool_err:
+                logger.error("重新初始化连接池失败: %s", pool_err)
+                return f"数据库连接不可用，无法执行修改。"
+
+        # 获取原生连接，使用显式事务控制
+        raw_conn = conn_wrapper.get_connection()
+        try:
+            with raw_conn.cursor() as cur:
+                cur.execute(sql)
+                affected = cur.rowcount
+                raw_conn.commit()
+                logger.info("数据修改成功: %s | 影响行数: %d", sql[:100], affected)
+        except Exception:
+            raw_conn.rollback()
+            raise
+        finally:
+            raw_conn.close()
+
+        if affected < 1:
+            return f"执行完成，但没有匹配到需要修改的记录。"
+
+        return f"修改成功，影响 {affected} 行。"
     except Exception as e:
         logger.error("数据修改失败: %s", e)
         return f"执行失败: {e}"
