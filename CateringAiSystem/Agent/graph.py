@@ -24,7 +24,7 @@ from typing_extensions import Annotated, TypedDict
 
 from CateringAiSystem.Agent.memory import AgentMemory
 from CateringAiSystem.Agent.middleWare import get_session_id
-from CateringAiSystem.Agent.tools import TOOL_MAP, knowledge_search, data_query, web_search, general_chat
+from CateringAiSystem.Agent.tools import TOOL_MAP, knowledge_search, data_query, web_search, general_chat, data_update
 from CateringAiSystem.Utils import llm_models
 
 from langfuse import observe
@@ -51,13 +51,15 @@ SYSTEM_PROMPT = """你是一个连锁餐饮企业的 AI 智能助手，名叫"�
 - knowledge_search: 搜索企业知识库（公司制度、菜品知识、运营SOP等）
 - data_query: 查询门店经营数据（营业额、订单量、客单价、菜品销量排行等）
 - web_search: 联网搜索（行业新闻、竞品动态、最新政策等）
+- data_update: 执行数据库修改（更新门店信息、菜品价格等，需管理员审批）
 - general_chat: 通用对话（闲聊、问候、情感交流等）
 
 ## 工具使用规则
 1. 用户询问公司制度、菜品知识、操作流程 → 使用 knowledge_search
 2. 用户询问营业数据、订单情况、菜品销量 → 使用 data_query
 3. 用户询问行业新闻、最新资讯、竞品动态 → 使用 web_search（仅限有权限的用户）
-4. 用户闲聊、问候、或以上都不适用 → 使用 general_chat
+4. 用户要求修改数据（更新门店信息、菜品价格等）→ 使用 data_update（需管理员审批）
+5. 用户闲聊、问候、或以上都不适用 → 使用 general_chat
 
 ## 重要规范
 - 优先使用 knowledge_search 和 data_query，避免杜撰信息
@@ -68,7 +70,7 @@ SYSTEM_PROMPT = """你是一个连锁餐饮企业的 AI 智能助手，名叫"�
 
 # ── 需要人工审核的敏感工具 ──
 
-HUMAN_REVIEW_TOOLS = {"data_query", "web_search"}
+HUMAN_REVIEW_TOOLS = {"data_update"}
 
 
 # ═══════════════════════════════════════════
@@ -151,7 +153,7 @@ async def call_tool(state: AgentState, config: RunnableConfig) -> dict:
 
 @observe(as_type="span", name="人工审核")
 async def human_review_node(state: AgentState, config: RunnableConfig) -> dict:
-    """人工审核节点：敏感工具（data_query / web_search）执行前暂停等待审批"""
+    """人工审核节点：敏感工具执行前暂停等待审批"""
     last_msg = state["messages"][-1] if state["messages"] else None
     if not last_msg or not getattr(last_msg, "tool_calls", None):
         return {"messages": []}
@@ -254,7 +256,7 @@ def _pick_tools(role_codes: list[str]) -> list:
     """根据角色选取可用工具"""
     has_boss = "admin" in role_codes
     has_franchisee = "franchisee" in role_codes
-    tools = [knowledge_search, data_query, general_chat]
+    tools = [knowledge_search, data_query, data_update, general_chat]
     if has_boss or (not has_franchisee):
         tools.append(web_search)
     return tools

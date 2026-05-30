@@ -326,6 +326,17 @@ class TtsSettings(BaseEnvSettings):
     )
 
 # =========================
+# Database Modify
+# =========================
+class DbModifySettings(BaseEnvSettings):
+    allowed_tables: str = "store,dish,review"
+
+    model_config = SettingsConfigDict(
+        env_prefix="DB_MODIFY_",
+        extra="ignore",
+    )
+
+# =========================
 # App Settings
 # =========================
 class Settings(BaseEnvSettings):
@@ -351,6 +362,7 @@ class Settings(BaseEnvSettings):
     neo4j: Neo4jSettings = Field(default_factory=Neo4jSettings)
     langfuse: LangFuseSettings = Field(default_factory=LangFuseSettings)
     tts: TtsSettings = Field(default_factory=TtsSettings)
+    db_modify: DbModifySettings = Field(default_factory=DbModifySettings)
 
     # 覆盖 extra="ignore" 以避免加载未知的环境变量
     model_config = SettingsConfigDict(

@@ -313,11 +313,75 @@ async def general_chat(query: str) -> str:
         return f"抱歉，我现在无法回复：{e}"
 
 
+# ═══════════════════════════════════════════════
+# data_update
+# ═══════════════════════════════════════════════
+
+@tool("data_update",
+      description="执行数据库修改操作（UPDATE/INSERT）。参数 sql：SQL 语句，例如 UPDATE store SET name='新名称' WHERE id=1。只能修改白名单中的表。修改操作需管理员审批。")
+async def data_update(sql: str, config: Optional[RunnableConfig] = None) -> str:
+    """执行数据库修改操作（受控的 UPDATE/INSERT，需人工审批）"""
+    sql = sql.strip()
+
+    # ── 安全校验 ──
+    if not sql:
+        return "SQL 语句不能为空。"
+
+    sql_upper = sql.upper()
+    allowed_ops = ("UPDATE", "INSERT")
+    if not any(sql_upper.startswith(op) for op in allowed_ops):
+        return f"安全限制：仅支持 {'/'.join(allowed_ops)} 操作。"
+
+    dangerous = ("DROP", "DELETE", "ALTER", "CREATE", "TRUNCATE", "EXEC", "EXECUTE")
+    for kw in dangerous:
+        if f" {kw} " in f" {sql_upper} " or sql_upper.startswith(kw):
+            return f"安全限制：禁止执行 {kw} 操作。"
+
+    # ── 提取表名并校验白名单 ──
+    from Base.Config.setting import settings
+    allowed_tables = [t.strip() for t in settings.db_modify.allowed_tables.split(",")]
+    allowed_tables_lower = [t.lower() for t in allowed_tables]
+
+    # UPDATE table_name SET ... → 取第一个词之后
+    # INSERT INTO table_name ... → 取 INTO 之后
+    table_name = ""
+    parts = sql_upper.split()
+    if parts[0] == "UPDATE" and len(parts) > 1:
+        table_name = parts[1]
+    elif parts[0] == "INSERT" and len(parts) > 2 and parts[1] == "INTO":
+        table_name = parts[2]
+    # 去掉可能的引号
+    table_name = table_name.strip("`'\"")
+    if not table_name:
+        return "无法解析表名，请确保 SQL 格式正确。"
+
+    if table_name.lower() not in allowed_tables_lower:
+        return (
+            f"安全限制：表 '{table_name}' 不在可修改白名单中。\n"
+            f"允许的表: {', '.join(allowed_tables)}"
+        )
+
+    # ── 执行 SQL ──
+    try:
+        from Base.Repository.base.connectionManager import ConnectionManager
+        conn = ConnectionManager.get_default()
+        if conn is None:
+            return "数据库连接不可用，请检查数据库配置。"
+
+        import asyncio
+        rows = await asyncio.to_thread(conn.execute, sql)
+        return f"执行成功，影响行数: {rows}" if isinstance(rows, int) else f"执行成功: {rows}"
+    except Exception as e:
+        logger.error("数据修改失败: %s", e)
+        return f"执行失败: {e}"
+
+
 # ── 工具映射表（供 graph.py 路由使用） ──
 
 TOOL_MAP = {
     "knowledge_search": knowledge_search,
     "data_query": data_query,
+    "data_update": data_update,
     "web_search": web_search,
     "general_chat": general_chat,
 }
